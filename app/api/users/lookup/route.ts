@@ -11,10 +11,10 @@ export async function GET(request: Request) {
 
   try {
     const result = await lookupSupportUser(query);
-    if (!result) return NextResponse.json({ user: null }, { status: 200 });
+    if (!result) return NextResponse.json({ user: null, source: null }, { status: 200 });
     const monthly = result.source === "users" ? await getUserSeries(result.user.id) : [];
-    return NextResponse.json({ user: result.user, monthly });
+    return NextResponse.json({ user: result.user, monthly, source: result.source });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to load user" }, { status: 500 });
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
