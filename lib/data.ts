@@ -88,7 +88,10 @@ export async function lookupSupportUser(query: string) {
     const rows = (await sql`
       select id, sequence_id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
       from app_users
-      where email = ${cleaned} or id::text = ${query} ${sequenceId !== null ? sql`or sequence_id = ${sequenceId}` : sql``}
+      where lower(email) = ${cleaned}
+         or id::text = ${query}
+         ${sequenceId !== null ? sql`or sequence_id = ${sequenceId}` : sql``}
+         or ('t-' || lpad(sequence_id::text, 6, '0')) = ${query.toLowerCase()}
       limit 1
     `) as AppUserRow[];
 
