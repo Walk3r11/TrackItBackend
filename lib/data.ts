@@ -84,17 +84,21 @@ export async function lookupSupportUser(query: string) {
   const sequenceMatch = cleaned.match(/^t-(\d{1,10})$/i);
   const sequenceId = sequenceMatch ? Number(sequenceMatch[1]) : null;
 
-  const rows = (await sql`
-    select id, sequence_id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
-    from app_users
-    where email = ${cleaned} or id::text = ${query} ${sequenceId !== null ? sql`or sequence_id = ${sequenceId}` : sql``}
-    limit 1
-  `) as AppUserRow[];
+  try {
+    const rows = (await sql`
+      select id, sequence_id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
+      from app_users
+      where email = ${cleaned} or id::text = ${query} ${sequenceId !== null ? sql`or sequence_id = ${sequenceId}` : sql``}
+      limit 1
+    `) as AppUserRow[];
 
-  if (rows[0]) {
-    return { user: mapAppUserToUserShape(rows[0]), source: "app_users" as const };
+    if (rows[0]) {
+      return { user: mapAppUserToUserShape(rows[0]), source: "app_users" as const };
+    }
+    return null;
+  } catch (error) {
+    return null;
   }
-  return null;
 }
 
 export async function getUserTickets(userId: string, status?: string) {
