@@ -168,9 +168,8 @@ export default function Page() {
                 <button
                   key={status}
                   onClick={() => setTicketStatus(status)}
-                  className={`pill px-3 py-2 capitalize ${
-                    ticketStatus === status ? "bg-white/10 border-white/30" : "bg-white/5 border-white/10"
-                  }`}
+                  className={`pill px-3 py-2 capitalize ${ticketStatus === status ? "bg-white/10 border-white/30" : "bg-white/5 border-white/10"
+                    }`}
                 >
                   {status}
                 </button>
