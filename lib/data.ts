@@ -22,6 +22,18 @@ type TicketRow = {
   created_at: string;
 };
 
+type AppUserRow = {
+  id: string;
+  sequence_id: number;
+  first_name: string;
+  middle_name: string;
+  last_name: string;
+  email: string;
+  password_hash: string;
+  password_salt: string;
+  created_at: string;
+};
+
 const toNumber = (value: Numeric) => Number(value ?? 0);
 
 const mapUser = (row: UserRow) => ({
@@ -97,4 +109,50 @@ export async function getUserSummary(userId: string) {
     monthlySpend: toNumber(summary.monthly_spend),
     lastActive: summary.last_active
   };
+}
+
+const mapAppUser = (row: AppUserRow) => ({
+  id: row.id,
+  sequenceId: `T-${String(row.sequence_id).padStart(6, "0")}`,
+  firstName: row.first_name,
+  middleName: row.middle_name,
+  lastName: row.last_name,
+  email: row.email,
+  createdAt: row.created_at
+});
+
+export async function findAppUserByEmail(email: string) {
+  const rows = (await sql`
+    select id, sequence_id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
+    from app_users
+    where email = ${email}
+    limit 1
+  `) as AppUserRow[];
+  return rows[0] ? mapAppUser(rows[0]) : null;
+}
+
+export async function getAppUserAuth(email: string) {
+  const rows = (await sql`
+    select id, sequence_id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
+    from app_users
+    where email = ${email}
+    limit 1
+  `) as AppUserRow[];
+  return rows[0] ?? null;
+}
+
+export async function createAppUser(input: {
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  email: string;
+  passwordHash: string;
+  passwordSalt: string;
+}) {
+  const rows = (await sql`
+    insert into app_users (first_name, middle_name, last_name, email, password_hash, password_salt)
+    values (${input.firstName}, ${input.middleName}, ${input.lastName}, ${input.email}, ${input.passwordHash}, ${input.passwordSalt})
+    returning id, sequence_id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
+  `) as AppUserRow[];
+  return mapAppUser(rows[0]);
 }

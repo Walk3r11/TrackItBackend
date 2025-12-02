@@ -28,6 +28,18 @@ create table if not exists tickets (
   created_at timestamptz default now()
 );
 
+create table if not exists app_users (
+  id uuid primary key default gen_random_uuid(),
+  sequence_id bigserial unique,
+  first_name text not null,
+  middle_name text not null,
+  last_name text not null,
+  email text not null unique,
+  password_hash text not null,
+  password_salt text not null,
+  created_at timestamptz default now()
+);
+
 create index if not exists idx_users_last_active on users (last_active desc);
 create index if not exists idx_users_created_at on users (created_at desc);
 create index if not exists idx_transactions_user_created on transactions (user_id, created_at desc);

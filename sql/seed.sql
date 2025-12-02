@@ -29,3 +29,14 @@ select id, subject, status, priority, updated_at from (
     ((select id from users where email = 'lena@swiftbank.app'), 'App login issue', 'closed', 'low', now() - interval '3 days')
 ) as t(user_id, subject, status, priority, updated_at)
 where user_id is not null;
+
+-- sample app user (password: trackit123)
+do $$
+declare
+  salt text := encode(gen_random_bytes(16), 'hex');
+  hashed text := encode(digest('trackit123' || salt, 'sha512'), 'hex');
+begin
+  insert into app_users (first_name, middle_name, last_name, email, password_hash, password_salt)
+  values ('Sample', 'User', 'One', 'sample@swiftbank.app', hashed, salt)
+  on conflict (email) do nothing;
+end $$;
