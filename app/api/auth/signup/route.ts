@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { randomBytes, scryptSync } from "crypto";
+import { randomBytes, createHash } from "crypto";
 import { createAppUser, findAppUserByEmail } from "@/lib/data";
 
 type Payload = {
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   }
 
   const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
+  const hash = createHash("sha512").update(password + salt).digest("hex");
 
   const user = await createAppUser({
     firstName: body.firstName.trim(),

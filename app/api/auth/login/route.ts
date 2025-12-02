@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { scryptSync, timingSafeEqual, randomBytes } from "crypto";
+import { createHash, timingSafeEqual, randomBytes } from "crypto";
 import { getAppUserAuth, findAppUserByEmail } from "@/lib/data";
 
 type Payload = {
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  const derived = scryptSync(password, authRow.password_salt, 64);
+  const derived = createHash("sha512").update(password + authRow.password_salt).digest();
   const stored = Buffer.from(authRow.password_hash, "hex");
   const match = stored.length === derived.length && timingSafeEqual(stored, derived);
   if (!match) {
