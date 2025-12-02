@@ -46,6 +46,16 @@ const mapUser = (row: UserRow) => ({
   createdAt: row.created_at
 });
 
+const mapAppUserToUserShape = (row: AppUserRow) => ({
+  id: row.id,
+  name: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" "),
+  email: row.email,
+  balance: 0,
+  monthlySpend: 0,
+  lastActive: row.created_at,
+  createdAt: row.created_at
+});
+
 const mapTicket = (row: TicketRow) => ({
   id: row.id,
   userId: row.user_id,
@@ -64,6 +74,27 @@ export async function lookupUser(query: string) {
     limit 1
   `) as UserRow[];
   return rows[0] ? mapUser(rows[0]) : null;
+}
+
+export async function lookupSupportUser(query: string) {
+  const directUser = await lookupUser(query);
+  if (directUser) return { user: directUser, source: "users" as const };
+
+  const cleaned = query.trim().toLowerCase();
+  const sequenceMatch = cleaned.match(/^t-(\d{1,10})$/i);
+  const sequenceId = sequenceMatch ? Number(sequenceMatch[1]) : null;
+
+  const rows = (await sql`
+    select id, sequence_id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
+    from app_users
+    where email = ${cleaned} or id::text = ${query} ${sequenceId !== null ? sql`or sequence_id = ${sequenceId}` : sql``}
+    limit 1
+  `) as AppUserRow[];
+
+  if (rows[0]) {
+    return { user: mapAppUserToUserShape(rows[0]), source: "app_users" as const };
+  }
+  return null;
 }
 
 export async function getUserTickets(userId: string, status?: string) {

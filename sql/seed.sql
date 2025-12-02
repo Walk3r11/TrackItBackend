@@ -1,3 +1,5 @@
+-- random fake emails to test the tables
+
 insert into users (name, email, balance, monthly_spend, last_active)
 values
   ('Amelia Carter', 'amelia@swiftbank.app', 15420.50, 820.30, now() - interval '1 day'),
