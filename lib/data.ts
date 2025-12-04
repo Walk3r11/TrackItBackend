@@ -24,7 +24,6 @@ type TicketRow = {
 
 type AppUserRow = {
   id: string;
-  sequence_id: number;
   first_name: string;
   middle_name: string;
   last_name: string;
@@ -81,17 +80,13 @@ export async function lookupSupportUser(query: string) {
   if (directUser) return { user: directUser, source: "users" as const };
 
   const cleaned = query.trim().toLowerCase();
-  const sequenceMatch = cleaned.match(/^t-(\d{1,10})$/i);
-  const sequenceId = sequenceMatch ? Number(sequenceMatch[1]) : null;
 
   try {
     const rows = (await sql`
-      select id, sequence_id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
+      select id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
       from app_users
       where lower(email) = ${cleaned}
          or id::text = ${query}
-         ${sequenceId !== null ? sql`or sequence_id = ${sequenceId}` : sql``}
-         or ('t-' || lpad(sequence_id::text, 6, '0')) = ${query.toLowerCase()}
       limit 1
     `) as AppUserRow[];
 
@@ -151,7 +146,6 @@ export async function getUserSummary(userId: string) {
 
 const mapAppUser = (row: AppUserRow) => ({
   id: row.id,
-  sequenceId: `T-${String(row.sequence_id).padStart(6, "0")}`,
   firstName: row.first_name,
   middleName: row.middle_name,
   lastName: row.last_name,
@@ -161,7 +155,7 @@ const mapAppUser = (row: AppUserRow) => ({
 
 export async function findAppUserByEmail(email: string) {
   const rows = (await sql`
-    select id, sequence_id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
+    select id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
     from app_users
     where email = ${email}
     limit 1
@@ -171,7 +165,7 @@ export async function findAppUserByEmail(email: string) {
 
 export async function getAppUserAuth(email: string) {
   const rows = (await sql`
-    select id, sequence_id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
+    select id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
     from app_users
     where email = ${email}
     limit 1
@@ -190,7 +184,7 @@ export async function createAppUser(input: {
   const rows = (await sql`
     insert into app_users (first_name, middle_name, last_name, email, password_hash, password_salt)
     values (${input.firstName}, ${input.middleName}, ${input.lastName}, ${input.email}, ${input.passwordHash}, ${input.passwordSalt})
-    returning id, sequence_id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
+    returning id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
   `) as AppUserRow[];
   return mapAppUser(rows[0]);
 }

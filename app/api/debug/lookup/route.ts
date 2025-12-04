@@ -11,9 +11,8 @@ export async function GET(request: Request) {
     const direct = await lookupUser(query);
     const support = await lookupSupportUser(query);
     const appUsers = await sql`
-      select id, sequence_id, email from app_users
+      select id, email from app_users
       where lower(email) = ${query.toLowerCase()} or id::text = ${query}
-         or ('t-' || lpad(sequence_id::text, 6, '0')) = ${query.toLowerCase()}
       limit 3
     `;
     return NextResponse.json({ direct, support, appUsers });

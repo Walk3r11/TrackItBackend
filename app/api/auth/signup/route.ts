@@ -17,6 +17,10 @@ export async function POST(request: Request) {
   if (!body.email || !body.password || !body.firstName || !body.middleName || !body.lastName) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
+  const hashSalt = process.env.HASH_SALT || process.env.PASSWORD_SALT;
+  if (!hashSalt) {
+    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+  }
 
   const email = body.email.trim().toLowerCase();
   const password = body.password.trim();
@@ -29,16 +33,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "User already exists" }, { status: 409 });
   }
 
-  const salt = randomBytes(16).toString("hex");
-  const hash = createHash("sha512").update(password + salt).digest("hex");
-
   const user = await createAppUser({
     firstName: body.firstName.trim(),
     middleName: body.middleName.trim(),
     lastName: body.lastName.trim(),
     email,
-    passwordHash: hash,
-    passwordSalt: salt
+    passwordHash: createHash("sha512").update(password + hashSalt).digest("hex"),
+    passwordSalt: hashSalt
   });
 
   const token = randomBytes(32).toString("hex");

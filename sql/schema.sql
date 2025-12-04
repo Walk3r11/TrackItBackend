@@ -30,7 +30,6 @@ create table if not exists tickets (
 
 create table if not exists app_users (
   id uuid primary key default gen_random_uuid(),
-  sequence_id bigserial unique,
   first_name text not null,
   middle_name text not null,
   last_name text not null,
