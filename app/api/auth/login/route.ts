@@ -12,10 +12,6 @@ export async function POST(request: Request) {
   if (!body.email || !body.password) {
     return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
   }
-  const hashSalt = process.env.HASH_SALT || process.env.PASSWORD_SALT;
-  if (!hashSalt) {
-    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
-  }
   const email = body.email.trim().toLowerCase();
   const password = body.password.trim();
 
@@ -24,7 +20,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  const derived = createHash("sha512").update(password + hashSalt).digest();
+  const salt = authRow.password_salt || process.env.HASH_SALT || process.env.PASSWORD_SALT || "";
+  const derived = createHash("sha512").update(password + salt).digest();
   const stored = Buffer.from(authRow.password_hash, "hex");
   const match = stored.length === derived.length && timingSafeEqual(stored, derived);
   if (!match) {
