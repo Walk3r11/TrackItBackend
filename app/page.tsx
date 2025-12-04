@@ -65,12 +65,14 @@ export default function Page() {
       await loadTickets(body.user.id);
       await loadTransactions(body.user.id);
       await loadCards(body.user.id);
+      setShowOverview(true);
     } catch (err) {
       setError("Unable to load that user. Verify the query and API endpoint.");
       setUser(null);
       setTickets([]);
       setTransactions([]);
       setCards([]);
+      setShowOverview(false);
     } finally {
       setLoading(false);
     }

@@ -28,9 +28,12 @@ type AppUserRow = {
   middle_name: string;
   last_name: string;
   email: string;
+  created_at: string;
+};
+
+type AppUserAuthRow = AppUserRow & {
   password_hash: string;
   password_salt: string;
-  created_at: string;
 };
 
 const toNumber = (value: Numeric) => Number(value ?? 0);
@@ -83,7 +86,7 @@ export async function lookupSupportUser(query: string) {
 
   try {
     const rows = (await sql`
-      select id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
+      select id, first_name, middle_name, last_name, email, created_at
       from app_users
       where lower(email) = ${cleaned}
          or id::text = ${query}
@@ -155,7 +158,7 @@ const mapAppUser = (row: AppUserRow) => ({
 
 export async function findAppUserByEmail(email: string) {
   const rows = (await sql`
-    select id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
+    select id, first_name, middle_name, last_name, email, created_at
     from app_users
     where email = ${email}
     limit 1
@@ -169,7 +172,7 @@ export async function getAppUserAuth(email: string) {
     from app_users
     where email = ${email}
     limit 1
-  `) as AppUserRow[];
+  `) as AppUserAuthRow[];
   return rows[0] ?? null;
 }
 
