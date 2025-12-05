@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const tickets = await getUserTickets(userId, status ?? undefined);
     return NextResponse.json({ tickets });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to load tickets" }, { status: 500 });
+    return NextResponse.json({ tickets: [], error: "Failed to load tickets" }, { status: 200 });
   }
 }
 

@@ -307,6 +307,7 @@ function filterTickets(tickets: TicketItem[], status: "all" | "open" | "pending"
 
 function formatRelative(value: string) {
   const date = new Date(value);
+  if (isNaN(date.getTime())) return "n/a";
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   const minutes = Math.floor(diff / 60000);
