@@ -12,26 +12,27 @@ export async function POST(request: Request) {
   const body = (await request.json()) as Payload;
   const authHeader = request.headers.get("authorization");
   const secret = process.env.JWT_SECRET || "trackit-secret";
-  if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
+  const allowPlain = process.env.ALLOW_PLAIN_AUTH === "true";
+
+  let email = body.email?.trim().toLowerCase();
+  let password = body.password?.trim();
+
+  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    const bearerToken = authHeader.slice(7).trim();
+    try {
+      const { payload } = await jwtVerify(bearerToken, new TextEncoder().encode(secret));
+      if (typeof payload.email === "string") email = payload.email.toLowerCase();
+      if (typeof payload.password === "string") password = payload.password;
+    } catch {
+      return NextResponse.json({ error: "Invalid auth token" }, { status: 401 });
+    }
+  } else if (!allowPlain) {
     return NextResponse.json({ error: "Missing auth token" }, { status: 401 });
   }
-  const bearerToken = authHeader.slice(7).trim();
 
-  let tokenEmail = body.email?.trim().toLowerCase();
-  let tokenPassword = body.password?.trim();
-  try {
-    const { payload } = await jwtVerify(bearerToken, new TextEncoder().encode(secret));
-    if (typeof payload.email === "string") tokenEmail = payload.email.toLowerCase();
-    if (typeof payload.password === "string") tokenPassword = payload.password;
-  } catch {
-    return NextResponse.json({ error: "Invalid auth token" }, { status: 401 });
-  }
-
-  if (!tokenEmail || !tokenPassword) {
+  if (!email || !password) {
     return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
   }
-  const email = tokenEmail;
-  const password = tokenPassword;
 
   const authRow = await getAppUserAuth(email);
   if (!authRow) {
