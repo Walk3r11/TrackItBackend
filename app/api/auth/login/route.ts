@@ -43,7 +43,8 @@ export async function POST(request: Request) {
   if (!salt) {
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
   }
-  const derived = createHash("sha512").update(password + salt).digest();
+  const userSalt = createHash("sha256").update(salt + email).digest("hex");
+  const derived = createHash("sha512").update(password + userSalt).digest();
   const stored = Buffer.from(authRow.password_hash, "hex");
   const match = stored.length === derived.length && timingSafeEqual(stored, derived);
   if (!match) {

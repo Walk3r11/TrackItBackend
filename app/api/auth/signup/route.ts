@@ -51,7 +51,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "User already exists" }, { status: 409 });
   }
 
-  const passwordHash = createHash("sha512").update(password + hashSalt).digest("hex");
+  const userSalt = createHash("sha256").update(hashSalt + email).digest("hex");
+  const passwordHash = createHash("sha512").update(password + userSalt).digest("hex");
 
   const user = await createAppUser({
     firstName: body.firstName.trim(),
