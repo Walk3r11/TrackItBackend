@@ -244,11 +244,11 @@ export default function Page() {
                   </div>
                   <div className="mt-3 space-y-2">
                     {cards.length ? (
-                      cards.map((card) => (
-                        <div key={card.id} className="flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold text-slate-100">{card.name}</p>
-                            <p className="text-xs text-slate-400">•••• {card.last4}</p>
+                    cards.map((card) => (
+                      <div key={card.id} className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-slate-100">{card.name}</p>
+                          <p className="text-xs text-slate-400">•••• {card.last4}</p>
                           </div>
                           {card.balance != null && (
                             <p className="text-sm text-slate-100">${card.balance.toLocaleString()}</p>
@@ -268,17 +268,17 @@ export default function Page() {
                   </div>
                   <div className="mt-3 space-y-2 max-h-52 overflow-y-auto pr-1">
                     {transactions.length ? (
-                      transactions.map((tx) => (
-                        <div key={tx.id} className="flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold text-slate-100">{tx.title}</p>
-                            <p className="text-xs text-slate-400">
-                              {tx.category ? `${tx.category} • ` : ""}{dateLabel.format(new Date(tx.date))}
-                            </p>
-                          </div>
-                          <span className={`font-semibold ${tx.type === "credit" ? "text-lime-300" : "text-rose-300"}`}>
-                            {tx.type === "credit" ? "+" : "-"}${Math.abs(tx.amount).toLocaleString()}
-                          </span>
+                    transactions.map((tx) => (
+                      <div key={tx.id} className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-slate-100">{tx.title}</p>
+                          <p className="text-xs text-slate-400">
+                            {tx.category ? `${tx.category} • ` : ""}{formatShortDate(tx.date)}
+                          </p>
+                        </div>
+                        <span className={`font-semibold ${tx.type === "credit" ? "text-lime-300" : "text-rose-300"}`}>
+                          {tx.type === "credit" ? "+" : "-"}${Math.abs(tx.amount).toLocaleString()}
+                        </span>
                         </div>
                       ))
                     ) : (
@@ -317,4 +317,14 @@ function formatRelative(value: string) {
   if (hours < 48) return `${hours} h ago`;
   if (days < 14) return `${days} days ago`;
   return dateLabel.format(date);
+}
+
+function formatShortDate(value: string) {
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return "n/a";
+  try {
+    return dateLabel.format(date);
+  } catch {
+    return "n/a";
+  }
 }
