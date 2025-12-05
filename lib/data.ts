@@ -88,12 +88,15 @@ export async function getUserTickets(userId: string, status?: string) {
 
 export async function getUserSeries(userId: string) {
   const rows = (await sql`
-    select to_char(date_trunc('month', created_at), 'Mon') as label, sum(amount) as value
-    from transactions
-    where user_id = ${userId}
-    group by 1
-    order by date_trunc('month', created_at) asc
-    limit 6
+    with buckets as (
+      select date_trunc('month', created_at) as bucket, sum(amount) as value
+      from transactions
+      where user_id = ${userId}
+      group by bucket
+      order by bucket asc
+      limit 6
+    )
+    select to_char(bucket, 'Mon') as label, value from buckets
   `) as { label: string; value: Numeric }[];
   return rows.map((row) => ({ label: row.label, value: toNumber(row.value) }));
 }
