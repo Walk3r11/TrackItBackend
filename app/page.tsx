@@ -215,22 +215,12 @@ export default function Page() {
             )}
           </div>
 
-          {user && (
-            <div className="mt-6 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowOverview(true)}
-                className="pill bg-white/10 px-4 py-2 text-sm font-semibold text-slate-100 glow-hover"
-              >
-                Open account overview
-              </button>
-            </div>
-          )}
+          {user && <div className="mt-6" />}
         </section>
 
         {showOverview && user && (
           <div className="backdrop" onClick={() => setShowOverview(false)}>
-            <div className="alert-card" onClick={(e) => e.stopPropagation()}>
+            <div className="alert-card slide-up" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
                   <p className="text-xs text-slate-400">Account snapshot</p>

@@ -33,7 +33,7 @@ type AppUserRow = {
 
 type AppUserAuthRow = AppUserRow & {
   password_hash: string;
-  password_salt: string;
+  password_salt: string | null;
 };
 
 const toNumber = (value: Numeric) => Number(value ?? 0);
