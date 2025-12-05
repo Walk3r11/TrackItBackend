@@ -14,6 +14,15 @@ async function getCards(userId: string) {
   return rows;
 }
 
+async function recalcUserBalance(userId: string) {
+  await sql`
+    update users
+    set balance = coalesce((select sum(balance) from cards where user_id = ${userId}), 0),
+        monthly_spend = coalesce((select sum(card_limit) from cards where user_id = ${userId}), monthly_spend)
+    where id = ${userId}
+  `;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
@@ -38,6 +47,7 @@ export async function POST(request: Request) {
       insert into cards (id, user_id, nickname, brand, holder, last4, full_number, expiry, card_limit, balance)
       values (${id}, ${userId}, ${nickname ?? null}, ${brand ?? null}, ${holder}, ${last4}, ${fullNumber ?? null}, ${expiry ?? null}, ${limit ?? null}, ${balance ?? null})
     `;
+    await recalcUserBalance(userId);
     const cards = await getCards(userId);
     return NextResponse.json({ cardId: id, cards }, { status: 201 });
   } catch (error) {
@@ -57,6 +67,7 @@ export async function PATCH(request: Request) {
       set balance = ${balance ?? null}, card_limit = ${limit ?? null}, updated_at = now()
       where id = ${id} and user_id = ${userId}
     `;
+    await recalcUserBalance(userId);
     const cards = await getCards(userId);
     return NextResponse.json({ cards }, { status: 200 });
   } catch (error) {
@@ -73,6 +84,7 @@ export async function DELETE(request: Request) {
   }
   try {
     await sql`delete from cards where id = ${id} and user_id = ${userId}`;
+    await recalcUserBalance(userId);
     const cards = await getCards(userId);
     return NextResponse.json({ cards }, { status: 200 });
   } catch (error) {

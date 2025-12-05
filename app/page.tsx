@@ -31,8 +31,8 @@ type CardItem = {
   id: string;
   name: string;
   last4: string;
-  balance?: number;
-  limit?: number;
+  balance: number;
+  limit: number;
 };
 
 const dateLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
@@ -111,7 +111,14 @@ export default function Page() {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error("Cards request failed");
       const body = await res.json();
-      setCards(body.cards ?? []);
+      const mapped: CardItem[] = (body.cards ?? []).map((card: any) => ({
+        id: card.id,
+        name: card.nickname || card.brand || "Card",
+        last4: card.last4 ?? "",
+        balance: typeof card.balance === "number" ? card.balance : 0,
+        limit: typeof card.card_limit === "number" ? card.card_limit : 0
+      }));
+      setCards(mapped);
     } catch (err) {
       setCards([]);
     }
