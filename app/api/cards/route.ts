@@ -44,3 +44,38 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to save card" }, { status: 500 });
   }
 }
+
+export async function PATCH(request: Request) {
+  const body = await request.json();
+  const { id, userId, balance, limit } = body;
+  if (!id || !userId) {
+    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+  try {
+    await sql`
+      update cards
+      set balance = ${balance ?? null}, card_limit = ${limit ?? null}, updated_at = now()
+      where id = ${id} and user_id = ${userId}
+    `;
+    const cards = await getCards(userId);
+    return NextResponse.json({ cards }, { status: 200 });
+  } catch (error) {
+    return NextResponse.json({ error: "Failed to update card" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+  const userId = searchParams.get("userId");
+  if (!id || !userId) {
+    return NextResponse.json({ error: "Missing id or userId" }, { status: 400 });
+  }
+  try {
+    await sql`delete from cards where id = ${id} and user_id = ${userId}`;
+    const cards = await getCards(userId);
+    return NextResponse.json({ cards }, { status: 200 });
+  } catch (error) {
+    return NextResponse.json({ error: "Failed to delete card" }, { status: 500 });
+  }
+}
