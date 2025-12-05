@@ -13,8 +13,11 @@ export async function GET(request: Request) {
     const result = await lookupSupportUser(query);
     if (!result) return NextResponse.json({ user: null, source: null }, { status: 200 });
     const monthly = result.source === "users" ? await getUserSeries(result.user.id) : [];
-    return NextResponse.json({ user: result.user, monthly, source: result.source });
+    return NextResponse.json(
+      { user: result.user, monthly, source: result.source },
+      { status: 200, headers: { "Access-Control-Allow-Origin": "*" } }
+    );
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    return NextResponse.json({ error: String(error) }, { status: 500, headers: { "Access-Control-Allow-Origin": "*" } });
   }
 }

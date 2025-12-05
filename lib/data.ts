@@ -4,12 +4,16 @@ type Numeric = string | number | null;
 
 type UserRow = {
   id: string;
-  name: string;
+  name: string | null;
+  first_name: string | null;
+  middle_name: string | null;
+  last_name: string | null;
   email: string;
   balance: Numeric;
   monthly_spend: Numeric;
   last_active: string;
   created_at: string;
+  password_hash?: string | null;
 };
 
 type TicketRow = {
@@ -22,39 +26,19 @@ type TicketRow = {
   created_at: string;
 };
 
-type AppUserRow = {
-  id: string;
-  first_name: string;
-  middle_name: string;
-  last_name: string;
-  email: string;
-  created_at: string;
-};
-
-type AppUserAuthRow = AppUserRow & {
+type AppUserAuthRow = UserRow & {
   password_hash: string;
-  password_salt: string | null;
 };
 
 const toNumber = (value: Numeric) => Number(value ?? 0);
 
 const mapUser = (row: UserRow) => ({
   id: row.id,
-  name: row.name,
+  name: row.name ?? [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" ").trim(),
   email: row.email,
   balance: toNumber(row.balance),
   monthlySpend: toNumber(row.monthly_spend),
   lastActive: row.last_active,
-  createdAt: row.created_at
-});
-
-const mapAppUserToUserShape = (row: AppUserRow) => ({
-  id: row.id,
-  name: [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" "),
-  email: row.email,
-  balance: 0,
-  monthlySpend: 0,
-  lastActive: row.created_at,
   createdAt: row.created_at
 });
 
@@ -70,7 +54,7 @@ const mapTicket = (row: TicketRow) => ({
 
 export async function lookupUser(query: string) {
   const rows = (await sql`
-    select id, name, email, balance, monthly_spend, last_active, created_at
+    select id, name, first_name, middle_name, last_name, email, balance, monthly_spend, last_active, created_at
     from users
     where email = ${query} or id::text = ${query}
     limit 1
@@ -79,27 +63,14 @@ export async function lookupUser(query: string) {
 }
 
 export async function lookupSupportUser(query: string) {
-  const directUser = await lookupUser(query);
-  if (directUser) return { user: directUser, source: "users" as const };
-
   const cleaned = query.trim().toLowerCase();
-
-  try {
-    const rows = (await sql`
-      select id, first_name, middle_name, last_name, email, created_at
-      from app_users
-      where lower(email) = ${cleaned}
-         or id::text = ${query}
-      limit 1
-    `) as AppUserRow[];
-
-    if (rows[0]) {
-      return { user: mapAppUserToUserShape(rows[0]), source: "app_users" as const };
-    }
-    return null;
-  } catch (error) {
-    return null;
-  }
+  const rows = (await sql`
+    select id, name, first_name, middle_name, last_name, email, balance, monthly_spend, last_active, created_at
+    from users
+    where lower(email) = ${cleaned} or id::text = ${query}
+    limit 1
+  `) as UserRow[];
+  return rows[0] ? { user: mapUser(rows[0]), source: "users" as const } : null;
 }
 
 export async function getUserTickets(userId: string, status?: string) {
@@ -158,18 +129,18 @@ const mapAppUser = (row: AppUserRow) => ({
 
 export async function findAppUserByEmail(email: string) {
   const rows = (await sql`
-    select id, first_name, middle_name, last_name, email, created_at
-    from app_users
+    select id, name, first_name, middle_name, last_name, email, balance, monthly_spend, last_active, created_at
+    from users
     where email = ${email}
     limit 1
-  `) as AppUserRow[];
+  `) as UserRow[];
   return rows[0] ? mapAppUser(rows[0]) : null;
 }
 
 export async function getAppUserAuth(email: string) {
   const rows = (await sql`
-    select id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
-    from app_users
+    select id, name, first_name, middle_name, last_name, email, password_hash, balance, monthly_spend, last_active, created_at
+    from users
     where email = ${email}
     limit 1
   `) as AppUserAuthRow[];
@@ -182,12 +153,12 @@ export async function createAppUser(input: {
   lastName: string;
   email: string;
   passwordHash: string;
-  passwordSalt: string;
 }) {
   const rows = (await sql`
-    insert into app_users (first_name, middle_name, last_name, email, password_hash, password_salt)
-    values (${input.firstName}, ${input.middleName}, ${input.lastName}, ${input.email}, ${input.passwordHash}, ${input.passwordSalt})
-    returning id, first_name, middle_name, last_name, email, password_hash, password_salt, created_at
-  `) as AppUserRow[];
+    insert into users (first_name, middle_name, last_name, email, password_hash, balance, monthly_spend, last_active, created_at, name)
+    values (${input.firstName}, ${input.middleName}, ${input.lastName}, ${input.email}, ${input.passwordHash}, 0, 0, now(), now(),
+            ${[input.firstName, input.middleName, input.lastName].filter(Boolean).join(" ")})
+    returning id, name, first_name, middle_name, last_name, email, balance, monthly_spend, last_active, created_at
+  `) as UserRow[];
   return mapAppUser(rows[0]);
 }

@@ -59,8 +59,7 @@ export async function POST(request: Request) {
     middleName: body.middleName.trim(),
     lastName: body.lastName.trim(),
     email,
-    passwordHash,
-    passwordSalt: "" // do not store reusable salt
+    passwordHash
   });
 
   const token = randomBytes(32).toString("hex");
