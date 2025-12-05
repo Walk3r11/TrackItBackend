@@ -118,7 +118,7 @@ export async function getUserSummary(userId: string) {
   };
 }
 
-const mapAppUser = (row: AppUserRow) => ({
+const mapAppUser = (row: UserRow) => ({
   id: row.id,
   firstName: row.first_name,
   middleName: row.middle_name,
