@@ -55,7 +55,6 @@ export async function POST(request: Request) {
 
   const user = await createAppUser({
     firstName: body.firstName.trim(),
-    middleName: null,
     lastName: body.lastName.trim(),
     email,
     passwordHash

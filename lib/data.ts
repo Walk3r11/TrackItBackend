@@ -34,7 +34,7 @@ const toNumber = (value: Numeric) => Number(value ?? 0);
 
 const mapUser = (row: UserRow) => ({
   id: row.id,
-  name: row.name ?? [row.first_name, row.middle_name, row.last_name].filter(Boolean).join(" ").trim(),
+  name: row.name ?? [row.first_name, row.last_name].filter(Boolean).join(" ").trim(),
   email: row.email,
   balance: toNumber(row.balance),
   monthlySpend: toNumber(row.monthly_spend),
@@ -124,7 +124,6 @@ export async function getUserSummary(userId: string) {
 const mapAppUser = (row: UserRow) => ({
   id: row.id,
   firstName: row.first_name,
-  middleName: row.middle_name,
   lastName: row.last_name,
   email: row.email,
   createdAt: row.created_at
@@ -132,7 +131,7 @@ const mapAppUser = (row: UserRow) => ({
 
 export async function findAppUserByEmail(email: string) {
   const rows = (await sql`
-    select id, name, first_name, middle_name, last_name, email, balance, monthly_spend, last_active, created_at
+    select id, name, first_name, last_name, email, balance, monthly_spend, last_active, created_at
     from users
     where email = ${email}
     limit 1
@@ -142,7 +141,7 @@ export async function findAppUserByEmail(email: string) {
 
 export async function getAppUserAuth(email: string) {
   const rows = (await sql`
-    select id, name, first_name, middle_name, last_name, email, password_hash, balance, monthly_spend, last_active, created_at
+    select id, name, first_name, last_name, email, password_hash, balance, monthly_spend, last_active, created_at
     from users
     where email = ${email}
     limit 1
@@ -152,16 +151,15 @@ export async function getAppUserAuth(email: string) {
 
 export async function createAppUser(input: {
   firstName: string;
-  middleName: string | null;
   lastName: string;
   email: string;
   passwordHash: string;
 }) {
   const rows = (await sql`
-    insert into users (first_name, middle_name, last_name, email, password_hash, balance, monthly_spend, last_active, created_at, name)
-    values (${input.firstName}, ${input.middleName}, ${input.lastName}, ${input.email}, ${input.passwordHash}, 0, 0, now(), now(),
-            ${[input.firstName, input.middleName, input.lastName].filter(Boolean).join(" ")})
-    returning id, name, first_name, middle_name, last_name, email, balance, monthly_spend, last_active, created_at
+    insert into users (first_name, last_name, email, password_hash, balance, monthly_spend, last_active, created_at, name)
+    values (${input.firstName}, ${input.lastName}, ${input.email}, ${input.passwordHash}, 0, 0, now(), now(),
+            ${[input.firstName, input.lastName].filter(Boolean).join(" ")})
+    returning id, name, first_name, last_name, email, balance, monthly_spend, last_active, created_at
   `) as UserRow[];
   return mapAppUser(rows[0]);
 }
