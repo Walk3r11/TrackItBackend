@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as Payload;
   const authHeader = request.headers.get("authorization");
   const secret = process.env.JWT_SECRET || "trackit-secret";
-  const allowPlain = process.env.ALLOW_PLAIN_AUTH === "true";
+  const allowPlain = process.env.ALLOW_PLAIN_AUTH !== "false";
 
   let email = body.email?.trim().toLowerCase();
   let password = body.password?.trim();
