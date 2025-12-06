@@ -6,7 +6,6 @@ type UserRow = {
   id: string;
   name: string | null;
   first_name: string | null;
-  middle_name: string | null;
   last_name: string | null;
   email: string;
   balance: Numeric;
@@ -54,7 +53,7 @@ const mapTicket = (row: TicketRow) => ({
 
 export async function lookupUser(query: string) {
   const rows = (await sql`
-    select id, name, first_name, middle_name, last_name, email, balance, monthly_spend, last_active, created_at
+    select id, name, first_name, last_name, email, balance, monthly_spend, last_active, created_at
     from users
     where email = ${query} or id::text = ${query}
     limit 1
@@ -65,7 +64,7 @@ export async function lookupUser(query: string) {
 export async function lookupSupportUser(query: string) {
   const cleaned = query.trim().toLowerCase();
   const rows = (await sql`
-    select id, name, first_name, middle_name, last_name, email, balance, monthly_spend, last_active, created_at
+    select id, name, first_name, last_name, email, balance, monthly_spend, last_active, created_at
     from users
     where lower(email) = ${cleaned} or id::text = ${query}
     limit 1
