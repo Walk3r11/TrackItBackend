@@ -38,6 +38,8 @@ type CardItem = {
 
 const dateLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 const apiBase = (process.env.NEXT_PUBLIC_API_BASE ?? "").replace(/\/$/, "");
+const euroCutover = new Date("2026-01-01T00:00:00Z");
+const bgnToEur = 1.95583;
 
 export default function Page() {
   const [query, setQuery] = useState("");
@@ -135,9 +137,9 @@ export default function Page() {
   }
 
   return (
-    <main className="relative overflow-hidden">
+    <main className="relative overflow-hidden min-h-screen">
       <div className="grid-overlay" />
-      <div className="max-w-6xl mx-auto px-6 py-10 space-y-10 relative fade-in">
+      <div className="max-w-6xl mx-auto px-6 py-10 space-y-10 relative z-10 fade-in">
         <header className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between slide-up">
           <div className="space-y-4">
             <div className="pill inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-200 glow-hover">
@@ -157,7 +159,7 @@ export default function Page() {
           </div>
         </header>
 
-        <section className="card-surface rounded-3xl p-6 shadow-glow slide-up">
+        <section className="card-surface rounded-3xl p-6 slide-up">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm text-slate-400">User lookup</p>
@@ -184,7 +186,7 @@ export default function Page() {
           {!user && !error && <p className="mt-3 text-sm text-slate-400">Start with a user search to load profile and tickets.</p>}
         </section>
 
-        <section className="card-surface rounded-3xl p-6 shadow-glow slide-up">
+        <section className="card-surface rounded-3xl p-6 slide-up">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-400">Support tickets</p>
@@ -265,7 +267,9 @@ export default function Page() {
                           <p className="text-xs text-slate-400">•••• {card.last4}</p>
                           </div>
                           {card.balance != null && (
-                            <p className="text-sm text-slate-100">${card.balance.toLocaleString()}</p>
+                            <p className="text-sm text-slate-100">
+                              €{formatEuro(card.balance)}
+                            </p>
                           )}
                         </div>
                       ))
@@ -291,7 +295,7 @@ export default function Page() {
                           </p>
                         </div>
                         <span className={`font-semibold ${tx.type === "credit" ? "text-lime-300" : "text-rose-300"}`}>
-                          {tx.type === "credit" ? "+" : "-"}${Math.abs(tx.amount).toLocaleString()}
+                          {tx.type === "credit" ? "+" : "-"}€{formatEuro(tx.amount)}
                         </span>
                         </div>
                       ))
@@ -337,4 +341,10 @@ function formatShortDate(value: string) {
   } catch {
     return "n/a";
   }
+}
+
+function formatEuro(amount: number) {
+  const useConversion = new Date() < euroCutover;
+  const value = useConversion ? amount / bgnToEur : amount;
+  return Math.abs(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
