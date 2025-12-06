@@ -152,7 +152,7 @@ export async function getAppUserAuth(email: string) {
 
 export async function createAppUser(input: {
   firstName: string;
-  middleName: string;
+  middleName: string | null;
   lastName: string;
   email: string;
   passwordHash: string;

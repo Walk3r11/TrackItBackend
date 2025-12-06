@@ -29,15 +29,15 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { userId, amount, category } = body;
+  const { userId, amount, category, createdAt } = body;
   if (!userId || amount == null || !category) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
   try {
     const id = randomUUID();
     await sql`
-      insert into transactions (id, user_id, amount, category)
-      values (${id}, ${userId}, ${amount}, ${category})
+      insert into transactions (id, user_id, amount, category, created_at)
+      values (${id}, ${userId}, ${amount}, ${category}, ${createdAt ?? null})
     `;
     const transactions = await getTransactions(userId);
     return NextResponse.json({ transactionId: id, transactions }, { status: 201 });
