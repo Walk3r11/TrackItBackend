@@ -33,6 +33,7 @@ type CardItem = {
   last4: string;
   balance: number;
   limit: number;
+  tags?: string[];
 };
 
 const dateLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
@@ -98,7 +99,15 @@ export default function Page() {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error("Transactions request failed");
       const body = await res.json();
-      setTransactions(body.transactions ?? []);
+      const mapped: TransactionItem[] = (body.transactions ?? []).map((tx: any) => ({
+        id: tx.id,
+        title: tx.category ?? "Transaction",
+        amount: typeof tx.amount === "number" ? tx.amount : Number(tx.amount ?? 0),
+        date: tx.created_at ?? tx.date ?? new Date().toISOString(),
+        type: (typeof tx.amount === "number" ? tx.amount : Number(tx.amount ?? 0)) >= 0 ? "credit" : "debit",
+        category: tx.category ?? undefined
+      }));
+      setTransactions(mapped);
     } catch (err) {
       setTransactions([]);
     }
@@ -113,10 +122,11 @@ export default function Page() {
       const body = await res.json();
       const mapped: CardItem[] = (body.cards ?? []).map((card: any) => ({
         id: card.id,
-        name: card.nickname || card.brand || "Card",
+        name: card.nickname || "Card",
         last4: card.last4 ?? "",
         balance: typeof card.balance === "number" ? card.balance : 0,
-        limit: typeof card.card_limit === "number" ? card.card_limit : 0
+        limit: typeof card.card_limit === "number" ? card.card_limit : 0,
+        tags: Array.isArray(card.tags) ? card.tags : undefined
       }));
       setCards(mapped);
     } catch (err) {
@@ -132,20 +142,17 @@ export default function Page() {
           <div className="space-y-4">
             <div className="pill inline-flex items-center gap-2 px-4 py-2 text-sm text-slate-200 glow-hover">
               <Zap className="h-4 w-4 text-lime-300" />
-              Finance cockpit for Swift app
+              Finance cockpit for TrackIt app
             </div>
             <div className="space-y-2">
               <h1 className="text-4xl md:text-5xl font-semibold font-display tracking-tight">
                 TrackIt control deck
               </h1>
-              <p className="text-slate-300 max-w-2xl leading-relaxed">
-                Modern dashboard shell ready to wire into your Spring Boot APIs and Neon once the backend is ready.
-              </p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm text-slate-300">
-              <span className="pill px-3 py-1">Support ops</span>
-              <span className="pill px-3 py-1">Spring ready</span>
-              <span className="pill px-3 py-1">Swift handoff</span>
+              <span className="pill px-3 py-1">Ticket Support</span>
+              <span className="pill px-3 py-1">User Lookup</span>
+              <span className="pill px-3 py-1">Tracker</span>
             </div>
           </div>
         </header>
@@ -270,7 +277,7 @@ export default function Page() {
 
                 <div className="rounded-2xl bg-white/5 border border-white/10 p-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-slate-300">Recent activity</p>
+                    <p className="text-sm text-slate-300">All activity</p>
                     <ShieldCheck className="h-5 w-5 text-amber-300" />
                   </div>
                   <div className="mt-3 space-y-2 max-h-52 overflow-y-auto pr-1">
@@ -295,10 +302,6 @@ export default function Page() {
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-white/5 border border-white/10 p-4 mt-3">
-                <p className="text-sm text-slate-300">Budgets</p>
-                <p className="text-sm text-slate-400 mt-2">Budgets data not available.</p>
-              </div>
             </div>
           </div>
         )}

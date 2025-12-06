@@ -6,7 +6,14 @@ export const dynamic = "force-dynamic";
 
 async function getCards(userId: string) {
   const rows = await sql`
-    select id, nickname, brand, holder, last4, full_number, expiry, card_limit, balance
+    select
+      id,
+      nickname,
+      last4,
+      full_number,
+      coalesce(card_limit, 0) as card_limit,
+      coalesce(balance, 0) as balance,
+      coalesce(tags, '{}') as tags
     from cards
     where user_id = ${userId}
     order by created_at desc
@@ -37,15 +44,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { userId, nickname, brand, holder, last4, fullNumber, expiry, limit, balance } = body;
-  if (!userId || !last4 || !holder) {
+  const { userId, nickname, last4, fullNumber, limit, balance, tags } = body;
+  if (!userId || !nickname) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
   try {
     const id = randomUUID();
+    const resolvedLast4 = last4 && String(last4).length > 0 ? last4 : "0000";
     await sql`
-      insert into cards (id, user_id, nickname, brand, holder, last4, full_number, expiry, card_limit, balance)
-      values (${id}, ${userId}, ${nickname ?? null}, ${brand ?? null}, ${holder}, ${last4}, ${fullNumber ?? null}, ${expiry ?? null}, ${limit ?? null}, ${balance ?? null})
+      insert into cards (id, user_id, nickname, last4, full_number, card_limit, balance, tags)
+      values (${id}, ${userId}, ${nickname}, ${resolvedLast4}, ${fullNumber ?? null}, ${limit ?? null}, ${balance ?? null}, ${tags ?? []})
     `;
     await recalcUserBalance(userId);
     const cards = await getCards(userId);
@@ -57,14 +65,20 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const body = await request.json();
-  const { id, userId, balance, limit } = body;
+  const { id, userId, balance, limit, tags, nickname, last4, fullNumber } = body;
   if (!id || !userId) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
   try {
     await sql`
       update cards
-      set balance = ${balance ?? null}, card_limit = ${limit ?? null}, updated_at = now()
+          set balance = ${balance ?? null},
+          card_limit = ${limit ?? null},
+          nickname = coalesce(${nickname ?? null}, nickname),
+          tags = coalesce(${tags ?? null}, tags),
+          last4 = coalesce(${last4 ?? null}, last4),
+          full_number = coalesce(${fullNumber ?? null}, full_number),
+          updated_at = now()
       where id = ${id} and user_id = ${userId}
     `;
     await recalcUserBalance(userId);

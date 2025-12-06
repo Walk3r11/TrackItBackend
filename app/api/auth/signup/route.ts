@@ -5,7 +5,6 @@ import { jwtVerify } from "jose";
 
 type Payload = {
   firstName?: string;
-  middleName?: string;
   lastName?: string;
   email?: string;
   password?: string;
@@ -34,7 +33,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing auth token" }, { status: 401 });
   }
 
-  if (!email || !password || !body.firstName || !body.middleName || !body.lastName) {
+  if (!email || !password || !body.firstName || !body.lastName) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
   const hashSalt = process.env.HASH_SALT || process.env.PASSWORD_SALT;
@@ -56,7 +55,7 @@ export async function POST(request: Request) {
 
   const user = await createAppUser({
     firstName: body.firstName.trim(),
-    middleName: body.middleName.trim(),
+    middleName: null,
     lastName: body.lastName.trim(),
     email,
     passwordHash
