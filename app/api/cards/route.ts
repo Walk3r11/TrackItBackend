@@ -4,6 +4,16 @@ import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export function OPTIONS() {
+  return NextResponse.json({}, { status: 204, headers: corsHeaders });
+}
+
 async function getCards(userId: string) {
   const rows = await sql`
     select
@@ -31,12 +41,12 @@ async function recalcUserBalance(userId: string) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
   try {
     const cards = await getCards(userId);
-    return NextResponse.json({ cards });
+    return NextResponse.json({ cards }, { headers: corsHeaders });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to load cards" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to load cards" }, { status: 500, headers: corsHeaders });
   }
 }
 
@@ -44,7 +54,7 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { userId, nickname, limit, balance, tags } = body;
   if (!userId || !nickname) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: corsHeaders });
   }
   try {
     const id = randomUUID();
@@ -54,9 +64,9 @@ export async function POST(request: Request) {
     `;
     await recalcUserBalance(userId);
     const cards = await getCards(userId);
-    return NextResponse.json({ cardId: id, cards }, { status: 201 });
+    return NextResponse.json({ cardId: id, cards }, { status: 201, headers: corsHeaders });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to save card" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to save card" }, { status: 500, headers: corsHeaders });
   }
 }
 
@@ -64,7 +74,7 @@ export async function PATCH(request: Request) {
   const body = await request.json();
   const { id, userId, balance, limit, tags, nickname } = body;
   if (!id || !userId) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: corsHeaders });
   }
   try {
     await sql`
@@ -78,9 +88,9 @@ export async function PATCH(request: Request) {
     `;
     await recalcUserBalance(userId);
     const cards = await getCards(userId);
-    return NextResponse.json({ cards }, { status: 200 });
+    return NextResponse.json({ cards }, { status: 200, headers: corsHeaders });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to update card" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update card" }, { status: 500, headers: corsHeaders });
   }
 }
 
@@ -89,14 +99,14 @@ export async function DELETE(request: Request) {
   const id = searchParams.get("id");
   const userId = searchParams.get("userId");
   if (!id || !userId) {
-    return NextResponse.json({ error: "Missing id or userId" }, { status: 400 });
+    return NextResponse.json({ error: "Missing id or userId" }, { status: 400, headers: corsHeaders });
   }
   try {
     await sql`delete from cards where id = ${id} and user_id = ${userId}`;
     await recalcUserBalance(userId);
     const cards = await getCards(userId);
-    return NextResponse.json({ cards }, { status: 200 });
+    return NextResponse.json({ cards }, { status: 200, headers: corsHeaders });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to delete card" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete card" }, { status: 500, headers: corsHeaders });
   }
 }
