@@ -35,8 +35,6 @@ create table if not exists cards (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references users(id) on delete cascade,
   nickname text,
-  last4 text not null default '0000',
-  full_number text,
   card_limit numeric(14, 2),
   balance numeric(14, 2),
   tags text[] default '{}',

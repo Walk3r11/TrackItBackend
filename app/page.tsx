@@ -30,7 +30,6 @@ type TransactionItem = {
 type CardItem = {
   id: string;
   name: string;
-  last4: string;
   balance: number;
   limit: number;
   tags?: string[];
@@ -125,7 +124,6 @@ export default function Page() {
       const mapped: CardItem[] = (body.cards ?? []).map((card: any) => ({
         id: card.id,
         name: card.nickname || "Card",
-        last4: card.last4 ?? "",
         balance: typeof card.balance === "number" ? card.balance : 0,
         limit: typeof card.card_limit === "number" ? card.card_limit : 0,
         tags: Array.isArray(card.tags) ? card.tags : undefined
@@ -264,7 +262,6 @@ export default function Page() {
                       <div key={card.id} className="flex items-center justify-between">
                         <div>
                           <p className="font-semibold text-slate-100">{card.name}</p>
-                          <p className="text-xs text-slate-400">•••• {card.last4}</p>
                           </div>
                           {card.balance != null && (
                             <p className="text-sm text-slate-100">
