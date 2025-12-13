@@ -1,5 +1,6 @@
 create extension if not exists "pgcrypto";
 
+-- users table
 create table if not exists users (
   id uuid primary key default gen_random_uuid(),
   first_name text,
@@ -13,24 +14,7 @@ create table if not exists users (
   created_at timestamptz default now()
 );
 
-create table if not exists transactions (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references users(id) on delete cascade,
-  amount numeric(14, 2) not null,
-  category text,
-  created_at timestamptz default now()
-);
-
-create table if not exists tickets (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references users(id) on delete cascade,
-  subject text not null,
-  status text not null default 'open',
-  priority text,
-  updated_at timestamptz default now(),
-  created_at timestamptz default now()
-);
-
+-- cards owned by a user
 create table if not exists cards (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references users(id) on delete cascade,
@@ -42,8 +26,31 @@ create table if not exists cards (
   updated_at timestamptz default now()
 );
 
+-- transactions, optionally linked to a card
+create table if not exists transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) on delete cascade,
+  card_id uuid references cards(id) on delete cascade,
+  amount numeric(14, 2) not null,
+  category text,
+  created_at timestamptz default now()
+);
+
+-- support tickets
+create table if not exists tickets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) on delete cascade,
+  subject text not null,
+  status text not null default 'open',
+  priority text,
+  updated_at timestamptz default now(),
+  created_at timestamptz default now()
+);
+
+-- indexes
 create index if not exists idx_users_last_active on users (last_active desc);
 create index if not exists idx_users_created_at on users (created_at desc);
-create index if not exists idx_transactions_user_created on transactions (user_id, created_at desc);
-create index if not exists idx_tickets_user_updated on tickets (user_id, updated_at desc);
 create index if not exists idx_cards_user on cards (user_id);
+create index if not exists idx_transactions_user_created on transactions (user_id, created_at desc);
+create index if not exists idx_transactions_card_created on transactions (card_id, created_at desc);
+create index if not exists idx_tickets_user_updated on tickets (user_id, updated_at desc);

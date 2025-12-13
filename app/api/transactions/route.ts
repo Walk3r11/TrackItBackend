@@ -16,7 +16,7 @@ export function OPTIONS() {
 
 async function getTransactions(userId: string) {
   const rows = await sql`
-    select id, user_id, amount, category, created_at
+    select id, user_id, card_id, amount, category, created_at
     from transactions
     where user_id = ${userId}
     order by created_at desc
@@ -39,15 +39,15 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { userId, amount, category, createdAt } = body;
+  const { userId, cardId, amount, category, createdAt } = body;
   if (!userId || amount == null || !category) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: corsHeaders });
   }
   try {
     const id = randomUUID();
     await sql`
-      insert into transactions (id, user_id, amount, category, created_at)
-      values (${id}, ${userId}, ${amount}, ${category}, ${createdAt ?? null})
+      insert into transactions (id, user_id, card_id, amount, category, created_at)
+      values (${id}, ${userId}, ${cardId ?? null}, ${amount}, ${category}, ${createdAt ?? null})
     `;
     const transactions = await getTransactions(userId);
     return NextResponse.json({ transactionId: id, transactions }, { status: 201, headers: corsHeaders });
