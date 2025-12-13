@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { getAppUserAuth, findAppUserByEmail } from "@/lib/data";
 import { jwtVerify } from "jose";
-import { verify as argonVerify, hash as argonHash } from "@node-rs/argon2";
+import bcrypt from "bcryptjs";
 import { sql } from "@/lib/db";
 
 type Payload = {
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   let verified = false;
   let usedVersion: "current" | "previous" | null = null;
   for (const p of peppers) {
-    const ok = await argonVerify(authRow.password_hash, p.value + password);
+    const ok = await bcrypt.compare(p.value + password, authRow.password_hash);
     if (ok) {
       verified = true;
       usedVersion = p.version;
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
 
   // rehash with current pepper if the previous one was used
   if (usedVersion === "previous") {
-    const newHash = await argonHash(currentPepper + password);
+    const newHash = await bcrypt.hash(currentPepper + password, 12);
     await sql`update users set password_hash = ${newHash} where id = ${authRow.id}`;
   }
 

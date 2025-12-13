@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { createAppUser, findAppUserByEmail } from "@/lib/data";
 import { jwtVerify } from "jose";
-import { hash as argonHash } from "@node-rs/argon2";
+import bcrypt from "bcryptjs";
 
 type Payload = {
   firstName?: string;
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "User already exists" }, { status: 409 });
   }
 
-  const passwordHash = await argonHash(pepper + password);
+  const passwordHash = await bcrypt.hash(pepper + password, 12);
 
   const user = await createAppUser({
     firstName: body.firstName.trim(),
