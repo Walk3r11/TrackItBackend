@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { createHash, timingSafeEqual, randomBytes } from "crypto";
+import { randomBytes } from "crypto";
 import { getAppUserAuth, findAppUserByEmail } from "@/lib/data";
 import { jwtVerify } from "jose";
+import { verify as argonVerify, hash as argonHash } from "@node-rs/argon2";
+import { sql } from "@/lib/db";
 
 type Payload = {
   email?: string;
@@ -12,6 +14,8 @@ export async function POST(request: Request) {
   const body = (await request.json()) as Payload;
   const authHeader = request.headers.get("authorization");
   const secret = process.env.JWT_SECRET || "trackit-secret";
+  const currentPepper = process.env.HASH_PEPPER_CURRENT;
+  const previousPepper = process.env.HASH_PEPPER_PREVIOUS;
 
   let email = body.email?.trim().toLowerCase();
   let password = body.password?.trim();
@@ -38,16 +42,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  const salt = process.env.HASH_SALT || process.env.PASSWORD_SALT;
-  if (!salt) {
+  if (!currentPepper) {
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
   }
-  const userSalt = createHash("sha256").update(salt + email).digest("hex");
-  const derived = createHash("sha512").update(password + userSalt).digest();
-  const stored = Buffer.from(authRow.password_hash, "hex");
-  const match = stored.length === derived.length && timingSafeEqual(stored, derived);
-  if (!match) {
+
+  const peppers: Array<{ value: string; version: "current" | "previous" }> = [
+    { value: currentPepper, version: "current" as const },
+    ...(previousPepper ? [{ value: previousPepper, version: "previous" as const }] : [])
+  ];
+
+  let verified = false;
+  let usedVersion: "current" | "previous" | null = null;
+  for (const p of peppers) {
+    const ok = await argonVerify(authRow.password_hash, p.value + password);
+    if (ok) {
+      verified = true;
+      usedVersion = p.version;
+      break;
+    }
+  }
+  if (!verified) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+  }
+
+  // rehash with current pepper if the previous one was used
+  if (usedVersion === "previous") {
+    const newHash = await argonHash(currentPepper + password);
+    await sql`update users set password_hash = ${newHash} where id = ${authRow.id}`;
   }
 
   const user = await findAppUserByEmail(email);

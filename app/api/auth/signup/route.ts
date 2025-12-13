@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { randomBytes, createHash } from "crypto";
+import { randomBytes } from "crypto";
 import { createAppUser, findAppUserByEmail } from "@/lib/data";
 import { jwtVerify } from "jose";
+import { hash as argonHash } from "@node-rs/argon2";
 
 type Payload = {
   firstName?: string;
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as Payload;
   const authHeader = request.headers.get("authorization");
   const secret = process.env.JWT_SECRET || "trackit-secret";
+  const pepper = process.env.HASH_PEPPER_CURRENT;
   let email = body.email?.trim().toLowerCase();
   let password = body.password?.trim();
 
@@ -35,8 +37,7 @@ export async function POST(request: Request) {
   if (!email || !password || !body.firstName || !body.lastName) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
-  const hashSalt = process.env.HASH_SALT || process.env.PASSWORD_SALT;
-  if (!hashSalt) {
+  if (!pepper) {
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
   }
 
@@ -49,8 +50,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "User already exists" }, { status: 409 });
   }
 
-  const userSalt = createHash("sha256").update(hashSalt + email).digest("hex");
-  const passwordHash = createHash("sha512").update(password + userSalt).digest("hex");
+  const passwordHash = await argonHash(pepper + password);
 
   const user = await createAppUser({
     firstName: body.firstName.trim(),
