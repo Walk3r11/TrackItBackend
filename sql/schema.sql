@@ -19,12 +19,14 @@ create table if not exists cards (
   balance numeric(14, 2),
   tags text [] default '{}',
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  unique (id, user_id)
 );
 create table if not exists transactions (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references users(id) on delete cascade,
-  card_id uuid references cards(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  card_id uuid not null,
+  foreign key (card_id, user_id) references cards(id, user_id) on delete cascade,
   amount numeric(14, 2) not null,
   category text,
   created_at timestamptz default now()

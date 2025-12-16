@@ -4,6 +4,16 @@ import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
 
+type Numeric = string | number | null;
+
+type CardRow = {
+  id: string;
+  nickname: string | null;
+  card_limit: Numeric;
+  balance: Numeric;
+  tags: string[] | null;
+};
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
@@ -14,8 +24,18 @@ export function OPTIONS() {
   return NextResponse.json({}, { status: 204, headers: corsHeaders });
 }
 
+const toNumber = (value: Numeric) => Number(value ?? 0);
+
+const mapCard = (row: CardRow) => ({
+  id: row.id,
+  nickname: row.nickname ?? "",
+  cardLimit: toNumber(row.card_limit),
+  balance: toNumber(row.balance),
+  tags: row.tags ?? []
+});
+
 async function getCards(userId: string) {
-  const rows = await sql`
+  const rows = (await sql`
     select
       id,
       nickname,
@@ -25,8 +45,8 @@ async function getCards(userId: string) {
     from cards
     where user_id = ${userId}
     order by created_at desc
-  `;
-  return rows;
+  `) as CardRow[];
+  return rows.map(mapCard);
 }
 
 async function recalcUserBalance(userId: string) {
