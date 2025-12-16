@@ -1,6 +1,5 @@
 create extension if not exists "pgcrypto";
 
--- users table
 create table if not exists users (
   id uuid primary key default gen_random_uuid(),
   first_name text,
@@ -14,7 +13,6 @@ create table if not exists users (
   created_at timestamptz default now()
 );
 
--- cards owned by a user
 create table if not exists cards (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references users(id) on delete cascade,
@@ -36,7 +34,6 @@ create table if not exists transactions (
   created_at timestamptz default now()
 );
 
--- support tickets
 create table if not exists tickets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references users(id) on delete cascade,
@@ -47,7 +44,6 @@ create table if not exists tickets (
   created_at timestamptz default now()
 );
 
--- indexes
 create index if not exists idx_users_last_active on users (last_active desc);
 create index if not exists idx_users_created_at on users (created_at desc);
 create index if not exists idx_cards_user on cards (user_id);
