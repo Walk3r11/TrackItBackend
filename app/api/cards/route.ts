@@ -17,6 +17,13 @@ type CardRow = {
   tags: string[] | null;
 };
 
+function isUuid(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
@@ -136,7 +143,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: corsHeaders });
   }
   try {
-    const id = randomUUID();
+    const id = isUuid(body?.id) ? body.id : randomUUID();
     const limits = parseLimits(body);
     await sql`
       insert into cards (id, user_id, nickname, card_limit, daily_limit, weekly_limit, monthly_limit, balance, tags)

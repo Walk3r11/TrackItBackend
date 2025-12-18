@@ -18,6 +18,13 @@ type TransactionRow = {
   created_at: string;
 };
 
+function isUuid(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -79,6 +86,7 @@ export async function POST(request: Request) {
     userId?: string;
     cardId?: string;
     card_id?: string;
+    id?: string;
     amount?: number;
     category?: string;
     categoryId?: string;
@@ -92,7 +100,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: corsHeaders });
   }
   try {
-    const id = randomUUID();
+    const cardRows = (await sql`
+      select 1
+      from cards
+      where id = ${cardId} and user_id = ${userId}
+      limit 1
+    `) as Array<{ "?column?": number }>;
+    if (!cardRows[0]) {
+      return NextResponse.json({ error: "Card not found" }, { status: 409, headers: corsHeaders });
+    }
+
+    const id = isUuid((body as any)?.id) ? (body as any).id : randomUUID();
     const categoryId = (body?.categoryId ?? body?.category_id) as string | undefined;
     const categoryName = (body?.categoryName ?? body?.category) as string | undefined;
 
