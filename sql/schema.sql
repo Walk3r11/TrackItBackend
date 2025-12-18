@@ -6,6 +6,7 @@ create table if not exists users (
   name text,
   email text not null unique,
   password_hash text,
+  email_verified boolean,
   balance numeric(14, 2) default 0,
   monthly_spend numeric(14, 2) default 0,
   last_active timestamptz default now(),
@@ -113,6 +114,24 @@ create table if not exists tickets (
   created_at timestamptz default now()
 );
 
+create table if not exists email_verifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  code_hash text not null,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz default now()
+);
+
+create table if not exists password_resets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  token_hash text not null,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz default now()
+);
+
 create index if not exists idx_users_last_active on users (last_active desc);
 create index if not exists idx_users_created_at on users (created_at desc);
 create index if not exists idx_cards_user on cards (user_id);
@@ -122,3 +141,9 @@ create index if not exists idx_transactions_user_created on transactions (user_i
 create index if not exists idx_transactions_card_created on transactions (card_id, created_at desc);
 create index if not exists idx_transactions_category_created on transactions (category_id, created_at desc);
 create index if not exists idx_tickets_user_updated on tickets (user_id, updated_at desc);
+create index if not exists idx_email_verifications_user on email_verifications (user_id, created_at desc);
+create index if not exists idx_password_resets_user on password_resets (user_id, created_at desc);
+
+alter table users add column if not exists email_verified boolean;
+update users set email_verified = true where email_verified is null;
+alter table users alter column email_verified set default false;

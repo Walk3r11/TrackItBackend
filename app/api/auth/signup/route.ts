@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { createAppUser, findAppUserByEmail } from "@/lib/data";
+import { sendEmail } from "@/lib/email";
+import { generateVerificationCode, hashToken } from "@/lib/tokens";
+import { sql } from "@/lib/db";
 import { jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 
@@ -58,6 +61,35 @@ export async function POST(request: Request) {
     email,
     passwordHash
   });
+
+  try {
+    await sql`
+      update email_verifications
+      set used_at = now()
+      where user_id = ${user.id}
+        and used_at is null
+    `;
+
+    const code = generateVerificationCode();
+    const codeHash = hashToken(code);
+
+    await sql`
+      insert into email_verifications (user_id, code_hash, expires_at)
+      values (${user.id}, ${codeHash}, now() + interval '10 minutes')
+    `;
+
+    await sendEmail({
+      to: email,
+      subject: "Your Trackit verification code",
+      html: `<p>Your verification code is:</p><p style="font-size:20px;font-weight:600;letter-spacing:2px;">${code}</p><p>This code expires in 10 minutes.</p>`,
+      text: `Your verification code is ${code}. It expires in 10 minutes.`
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Failed to send verification code. Request a new code." },
+      { status: 500 }
+    );
+  }
 
   const token = randomBytes(32).toString("hex");
 

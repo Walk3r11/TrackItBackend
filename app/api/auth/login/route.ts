@@ -41,6 +41,9 @@ export async function POST(request: Request) {
   if (!authRow) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
+  if (authRow.email_verified === false) {
+    return NextResponse.json({ error: "Email not verified" }, { status: 403 });
+  }
 
   if (!currentPepper) {
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });

@@ -8,6 +8,7 @@ type UserRow = {
   first_name: string | null;
   last_name: string | null;
   email: string;
+  email_verified?: boolean | null;
   balance: Numeric;
   monthly_spend: Numeric;
   last_active: string;
@@ -157,7 +158,7 @@ export async function findAppUserByEmail(email: string) {
 
 export async function getAppUserAuth(email: string) {
   const rows = (await sql`
-    select id, name, first_name, last_name, email, password_hash, balance, monthly_spend, last_active, created_at
+    select id, name, first_name, last_name, email, email_verified, password_hash, balance, monthly_spend, last_active, created_at
     from users
     where email = ${email}
     limit 1
