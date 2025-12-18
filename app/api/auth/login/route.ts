@@ -65,7 +65,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  // rehash with current pepper if the previous one was used
   if (usedVersion === "previous") {
     const newHash = await bcrypt.hash(currentPepper + password, 12);
     await sql`update users set password_hash = ${newHash} where id = ${authRow.id}`;

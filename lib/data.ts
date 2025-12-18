@@ -31,6 +31,23 @@ type AppUserAuthRow = UserRow & {
 
 const toNumber = (value: Numeric) => Number(value ?? 0);
 
+type CategoryRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SavingsGoalRow = {
+  user_id: string;
+  goal_amount: Numeric;
+  goal_period: "daily" | "weekly" | "monthly";
+  created_at: string;
+  updated_at: string;
+};
+
 const mapUser = (row: UserRow) => ({
   id: row.id,
   name: row.name ?? [row.first_name, row.last_name].filter(Boolean).join(" ").trim(),
@@ -160,5 +177,137 @@ export async function createAppUser(input: {
             ${[input.firstName, input.lastName].filter(Boolean).join(" ")})
     returning id, name, first_name, last_name, email, balance, monthly_spend, last_active, created_at
   `) as UserRow[];
-  return mapAppUser(rows[0]);
+
+  const user = mapAppUser(rows[0]);
+  await sql`
+    insert into savings_goals (user_id)
+    values (${user.id})
+    on conflict (user_id) do nothing
+  `;
+  await sql`
+    insert into categories (user_id, name)
+    values (${user.id}, 'Uncategorized')
+    on conflict (user_id, name) do nothing
+  `;
+
+  return user;
+}
+
+const normalizeCategoryName = (name: string) =>
+  name
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 80);
+
+const mapCategory = (row: CategoryRow) => ({
+  id: row.id,
+  userId: row.user_id,
+  name: row.name,
+  color: row.color ?? undefined,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at
+});
+
+export async function ensureUncategorizedCategory(userId: string) {
+  const rows = (await sql`
+    insert into categories (user_id, name)
+    values (${userId}, 'Uncategorized')
+    on conflict (user_id, name)
+    do update set updated_at = categories.updated_at
+    returning id, user_id, name, color, created_at, updated_at
+  `) as CategoryRow[];
+  return mapCategory(rows[0]);
+}
+
+export async function listCategories(userId: string) {
+  const rows = (await sql`
+    select id, user_id, name, color, created_at, updated_at
+    from categories
+    where user_id = ${userId}
+    order by case when name = 'Uncategorized' then 0 else 1 end, name asc
+  `) as CategoryRow[];
+  return rows.map(mapCategory);
+}
+
+export async function getOrCreateCategoryByName(userId: string, name: string, color?: string | null) {
+  const normalized = normalizeCategoryName(name);
+  if (!normalized) return ensureUncategorizedCategory(userId);
+
+  const rows = (await sql`
+    insert into categories (user_id, name, color)
+    values (${userId}, ${normalized}, ${color ?? null})
+    on conflict (user_id, name)
+    do update set color = coalesce(${color ?? null}, categories.color),
+                  updated_at = now()
+    returning id, user_id, name, color, created_at, updated_at
+  `) as CategoryRow[];
+  return mapCategory(rows[0]);
+}
+
+export async function clearUserCategories(userId: string) {
+  const defaultCategory = await ensureUncategorizedCategory(userId);
+
+  await sql`
+    update transactions
+    set category_id = ${defaultCategory.id}
+    where user_id = ${userId}
+      and (category_id is null or category_id <> ${defaultCategory.id})
+  `;
+
+  await sql`
+    delete from categories
+    where user_id = ${userId}
+      and id <> ${defaultCategory.id}
+  `;
+
+  return listCategories(userId);
+}
+
+export async function getSavingsGoal(userId: string) {
+  const rows = (await sql`
+    insert into savings_goals (user_id)
+    values (${userId})
+    on conflict (user_id)
+    do update set updated_at = savings_goals.updated_at
+    returning user_id, goal_amount, goal_period, created_at, updated_at
+  `) as SavingsGoalRow[];
+
+  const row = rows[0];
+  return {
+    userId: row.user_id,
+    goalAmount: toNumber(row.goal_amount),
+    goalPeriod: row.goal_period,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export async function updateSavingsGoal(input: { userId: string; goalAmount?: number | null; goalPeriod?: string }) {
+  const validPeriods = new Set(["daily", "weekly", "monthly"]);
+  const period = input.goalPeriod?.toLowerCase();
+  const goalPeriod = period && validPeriods.has(period) ? (period as "daily" | "weekly" | "monthly") : undefined;
+
+  const rows = (await sql`
+    insert into savings_goals (user_id, goal_amount, goal_period, updated_at)
+    values (
+      ${input.userId},
+      ${input.goalAmount ?? 0},
+      ${goalPeriod ?? "monthly"},
+      now()
+    )
+    on conflict (user_id)
+    do update set goal_amount = coalesce(${input.goalAmount ?? null}, savings_goals.goal_amount),
+                  goal_period = coalesce(${goalPeriod ?? null}, savings_goals.goal_period),
+                  updated_at = now()
+    returning user_id, goal_amount, goal_period, created_at, updated_at
+  `) as SavingsGoalRow[];
+
+  const row = rows[0];
+  return {
+    userId: row.user_id,
+    goalAmount: toNumber(row.goal_amount),
+    goalPeriod: row.goal_period,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
 }

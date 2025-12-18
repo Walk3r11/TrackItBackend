@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { randomUUID } from "crypto";
+import { ensureUncategorizedCategory, getOrCreateCategoryByName } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,9 @@ type TransactionRow = {
   user_id: string;
   card_id: string;
   amount: Numeric;
-  category: string | null;
+  category_id: string | null;
+  category_name: string | null;
+  category_color: string | null;
   created_at: string;
 };
 
@@ -32,15 +35,26 @@ const mapTransaction = (row: TransactionRow) => ({
   userId: row.user_id,
   cardId: row.card_id,
   amount: toNumber(row.amount),
-  category: row.category ?? "",
+  categoryId: row.category_id,
+  category: row.category_name ?? "Uncategorized",
+  categoryColor: row.category_color ?? undefined,
   createdAt: row.created_at
 });
 
 async function getTransactions(userId: string) {
   const rows = (await sql`
-    select id, user_id, card_id, amount, category, created_at
-    from transactions
-    where user_id = ${userId}
+    select
+      t.id,
+      t.user_id,
+      t.card_id,
+      t.amount,
+      t.category_id,
+      c.name as category_name,
+      c.color as category_color,
+      t.created_at
+    from transactions t
+    left join categories c on c.id = t.category_id
+    where t.user_id = ${userId}
     order by created_at desc
     limit 100
   `) as TransactionRow[];
@@ -61,24 +75,57 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { userId, amount, category, createdAt } = body as {
+  const { userId, amount, createdAt } = body as {
     userId?: string;
     cardId?: string;
     card_id?: string;
     amount?: number;
     category?: string;
+    categoryId?: string;
+    category_id?: string;
+    categoryName?: string;
     createdAt?: string;
   };
   const cardId = (body?.cardId ?? body?.card_id) as string | undefined;
 
-  if (!userId || !cardId || amount == null || !category) {
+  if (!userId || !cardId || amount == null) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: corsHeaders });
   }
   try {
     const id = randomUUID();
+    const categoryId = (body?.categoryId ?? body?.category_id) as string | undefined;
+    const categoryName = (body?.categoryName ?? body?.category) as string | undefined;
+
+    let resolvedCategory = null as null | { id: string; name: string | null };
+    if (categoryId) {
+      const rows = (await sql`
+        select id, name
+        from categories
+        where id = ${categoryId} and user_id = ${userId}
+        limit 1
+      `) as { id: string; name: string }[];
+      if (rows[0]) resolvedCategory = { id: rows[0].id, name: rows[0].name };
+    }
+    if (!resolvedCategory && categoryName) {
+      const created = await getOrCreateCategoryByName(userId, categoryName);
+      resolvedCategory = { id: created.id, name: created.name };
+    }
+    if (!resolvedCategory) {
+      const fallback = await ensureUncategorizedCategory(userId);
+      resolvedCategory = { id: fallback.id, name: fallback.name };
+    }
+
     await sql`
-      insert into transactions (id, user_id, card_id, amount, category, created_at)
-      values (${id}, ${userId}, ${cardId ?? null}, ${amount}, ${category}, ${createdAt ?? null})
+      insert into transactions (id, user_id, card_id, amount, category_id, category, created_at)
+      values (
+        ${id},
+        ${userId},
+        ${cardId ?? null},
+        ${amount},
+        ${resolvedCategory.id},
+        ${resolvedCategory.name ?? "Uncategorized"},
+        ${createdAt ?? null}
+      )
     `;
     const transactions = await getTransactions(userId);
     return NextResponse.json({ transactionId: id, transactions }, { status: 201, headers: corsHeaders });
