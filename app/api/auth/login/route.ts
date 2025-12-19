@@ -10,6 +10,14 @@ type Payload = {
   password?: string;
 };
 
+const minPasswordLength = 8;
+const passwordPolicy = {
+  upper: /[A-Z]/,
+  lower: /[a-z]/,
+  number: /[0-9]/,
+  special: /[^A-Za-z0-9]/
+};
+
 export async function POST(request: Request) {
   const body = (await request.json()) as Payload;
   const authHeader = request.headers.get("authorization");
@@ -35,6 +43,18 @@ export async function POST(request: Request) {
 
   if (!email || !password) {
     return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
+  }
+  if (
+    password.length < minPasswordLength ||
+    !passwordPolicy.upper.test(password) ||
+    !passwordPolicy.lower.test(password) ||
+    !passwordPolicy.number.test(password) ||
+    !passwordPolicy.special.test(password)
+  ) {
+    return NextResponse.json(
+      { error: "Password must be 8+ chars with upper, lower, number, and special. Reset your password." },
+      { status: 400 }
+    );
   }
 
   const authRow = await getAppUserAuth(email);

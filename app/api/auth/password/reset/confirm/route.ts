@@ -77,15 +77,24 @@ export async function POST(request: Request) {
 
   try {
     const users = (await sql`
-      select id
+      select id, password_hash
       from users
       where email = ${email}
       limit 1
-    `) as { id: string }[];
+    `) as { id: string; password_hash: string | null }[];
 
     const user = users[0];
     if (!user) {
       return NextResponse.json({ error: "Invalid token" }, { status: 400, headers });
+    }
+    if (user.password_hash) {
+      const sameAsCurrent = await bcrypt.compare(pepper + newPassword, user.password_hash);
+      if (sameAsCurrent) {
+        return NextResponse.json(
+          { error: "New password must be different from the current password." },
+          { status: 400, headers }
+        );
+      }
     }
 
     const tokenHash = hashToken(token);
