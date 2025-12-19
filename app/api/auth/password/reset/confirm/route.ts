@@ -108,6 +108,12 @@ export async function POST(request: Request) {
     const newHash = await bcrypt.hash(pepper + newPassword, 12);
     await sql`update users set password_hash = ${newHash} where id = ${user.id}`;
     await sql`update password_resets set used_at = now() where id = ${record.id}`;
+    await sql`
+      update auth_sessions
+      set revoked_at = now()
+      where user_id = ${user.id}
+        and revoked_at is null
+    `;
 
     return NextResponse.json({ ok: true }, { headers });
   } catch (error) {
