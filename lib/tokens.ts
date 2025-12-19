@@ -29,3 +29,7 @@ export function generateVerificationCode() {
 export function generateResetToken() {
   return randomBytes(32).toString("hex");
 }
+
+export function generateSessionToken() {
+  return randomBytes(32).toString("hex");
+}

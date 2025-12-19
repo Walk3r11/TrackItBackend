@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { randomBytes } from "crypto";
 import { getAppUserAuth, findAppUserByEmail } from "@/lib/data";
 import { jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { sql } from "@/lib/db";
+import { generateSessionToken, hashToken } from "@/lib/tokens";
 
 type Payload = {
   email?: string;
@@ -74,6 +74,11 @@ export async function POST(request: Request) {
   }
 
   const user = await findAppUserByEmail(email);
-  const sessionToken = randomBytes(32).toString("hex");
+  const sessionToken = generateSessionToken();
+  const tokenHash = hashToken(sessionToken);
+  await sql`
+    insert into auth_sessions (user_id, token_hash, expires_at)
+    values (${authRow.id}, ${tokenHash}, now() + interval '2 months')
+  `;
   return NextResponse.json({ token: sessionToken, user }, { status: 200 });
 }
