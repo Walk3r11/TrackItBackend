@@ -2,7 +2,10 @@ import { createHash, randomBytes, randomInt } from "crypto";
 
 export function getAppBaseUrl() {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, "");
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  if (process.env.NODE_ENV !== "production" && process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  throw new Error("APP_URL is not set");
 }
 
 export function getTokenSecret() {
