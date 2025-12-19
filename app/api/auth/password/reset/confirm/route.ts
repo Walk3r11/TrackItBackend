@@ -43,7 +43,7 @@ function getCorsHeaders(origin: string | null) {
 }
 
 export async function OPTIONS(request: Request) {
-  return NextResponse.json({}, { status: 204, headers: getCorsHeaders(request.headers.get("origin")) });
+  return new Response(null, { status: 204, headers: getCorsHeaders(request.headers.get("origin")) });
 }
 
 export async function POST(request: Request) {
