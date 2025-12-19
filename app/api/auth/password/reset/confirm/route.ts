@@ -10,6 +10,12 @@ type Payload = {
 };
 
 const minPasswordLength = 8;
+const passwordPolicy = {
+  upper: /[A-Z]/,
+  lower: /[a-z]/,
+  number: /[0-9]/,
+  special: /[^A-Za-z0-9]/
+};
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as Payload;
@@ -26,8 +32,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
   }
 
-  if (newPassword.length < minPasswordLength) {
-    return NextResponse.json({ error: "Password too short" }, { status: 400 });
+  if (
+    newPassword.length < minPasswordLength ||
+    !passwordPolicy.upper.test(newPassword) ||
+    !passwordPolicy.lower.test(newPassword) ||
+    !passwordPolicy.number.test(newPassword) ||
+    !passwordPolicy.special.test(newPassword)
+  ) {
+    return NextResponse.json(
+      { error: "Password must be 8+ chars with upper, lower, number, and special." },
+      { status: 400 }
+    );
   }
 
   try {
