@@ -2,28 +2,48 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = [
+    "https://www.trackitco.com",
+    "https://trackitco.com",
+    "http://localhost:3000",
+  ];
+  
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : "*";
+  
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
 
-export function OPTIONS() {
-  return NextResponse.json({}, { status: 204, headers: corsHeaders });
+export function OPTIONS(request: Request) {
+  return NextResponse.json({}, { status: 204, headers: getCorsHeaders(request) });
 }
 
 async function authenticateUser(request: Request): Promise<{ userId: string | null; isSupport: boolean }> {
   const cookieHeader = request.headers.get("cookie");
+  const authHeader = request.headers.get("authorization");
   const { searchParams } = new URL(request.url);
   const supportUserId = searchParams.get("supportUserId");
-
+  
   let token: string | null = null;
-
-  if (cookieHeader) {
+  
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7).trim();
+  } else if (cookieHeader) {
     const cookieMatch = cookieHeader.match(/auth-token=([^;]+)/);
     if (cookieMatch) token = cookieMatch[1];
   }
-
+  
+  const tokenParam = searchParams.get("token");
+  if (!token && tokenParam) {
+    token = tokenParam;
+  }
+  
   if (!token) {
     return { userId: null, isSupport: false };
   }
@@ -33,7 +53,7 @@ async function authenticateUser(request: Request): Promise<{ userId: string | nu
     const JWT_SECRET = new TextEncoder().encode(
       process.env.JWT_SECRET
     );
-
+    
     try {
       const { payload } = await jwtVerify(token, JWT_SECRET);
       if (payload.role === "support" && supportUserId) {
@@ -41,7 +61,7 @@ async function authenticateUser(request: Request): Promise<{ userId: string | nu
       }
     } catch {
     }
-
+    
     const tokenHash = hashToken(token);
     const rows = (await sql`
       select u.id as user_id
@@ -186,7 +206,7 @@ export async function GET(
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
-      ...corsHeaders,
+      ...getCorsHeaders(request),
     },
   });
 }

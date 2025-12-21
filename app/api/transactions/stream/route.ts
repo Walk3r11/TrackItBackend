@@ -2,25 +2,45 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { jwtVerify } from "jose";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = [
+    "https://www.trackitco.com",
+    "https://trackitco.com",
+    "http://localhost:3000",
+  ];
+  
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : "*";
+  
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
 
-export function OPTIONS() {
-  return NextResponse.json({}, { status: 204, headers: corsHeaders });
+export function OPTIONS(request: Request) {
+  return NextResponse.json({}, { status: 204, headers: getCorsHeaders(request) });
 }
 
 async function authenticateSupport(request: Request): Promise<{ userId: string | null }> {
   const { searchParams } = new URL(request.url);
   const cookieHeader = request.headers.get("cookie");
+  const authHeader = request.headers.get("authorization");
   
   let token: string | null = null;
   
-  if (cookieHeader) {
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7).trim();
+  } else if (cookieHeader) {
     const cookieMatch = cookieHeader.match(/auth-token=([^;]+)/);
     if (cookieMatch) token = cookieMatch[1];
+  }
+  
+  const tokenParam = searchParams.get("token");
+  if (!token && tokenParam) {
+    token = tokenParam;
   }
   
   if (!token) {
@@ -59,7 +79,8 @@ export async function GET(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
-      let lastTransactionId: string | null = null;
+      let lastTransactionTimestamp: string | null = null;
+      let seenTransactionIds = new Set<string>();
       let isActive = true;
 
       controller.enqueue(
@@ -73,41 +94,38 @@ export async function GET(request: Request) {
         }
 
         try {
-          const query = lastTransactionId
-            ? sql`
-                select 
-                  t.id,
-                  t.user_id,
-                  t.card_id,
-                  t.amount,
-                  t.category_id,
-                  c.name as category_name,
-                  c.color as category_color,
-                  t.created_at
-                from transactions t
-                left join categories c on c.id = t.category_id
-                where t.user_id = ${userId}
-                  and t.id > ${lastTransactionId}
-                order by t.created_at asc
-              `
-            : sql`
-                select 
-                  t.id,
-                  t.user_id,
-                  t.card_id,
-                  t.amount,
-                  t.category_id,
-                  c.name as category_name,
-                  c.color as category_color,
-                  t.created_at
-                from transactions t
-                left join categories c on c.id = t.category_id
-                where t.user_id = ${userId}
-                order by t.created_at desc
-                limit 1
-              `;
+          if (!lastTransactionTimestamp) {
+            const latestTx = (await sql`
+              select created_at
+              from transactions
+              where user_id = ${userId}
+              order by created_at desc
+              limit 1
+            `) as Array<{ created_at: string }>;
+            
+            if (latestTx.length > 0) {
+              lastTransactionTimestamp = latestTx[0].created_at;
+              console.log(`[Transaction Stream] Initialized baseline timestamp: ${lastTransactionTimestamp} for user ${userId}`);
+            }
+            return;
+          }
 
-          const transactions = (await query) as Array<{
+          const transactions = (await sql`
+            select 
+              t.id,
+              t.user_id,
+              t.card_id,
+              t.amount,
+              t.category_id,
+              c.name as category_name,
+              c.color as category_color,
+              t.created_at
+            from transactions t
+            left join categories c on c.id = t.category_id
+            where t.user_id = ${userId}
+              and t.created_at > ${lastTransactionTimestamp}
+            order by t.created_at asc
+          `) as Array<{
             id: string;
             user_id: string;
             card_id: string;
@@ -119,9 +137,13 @@ export async function GET(request: Request) {
           }>;
 
           if (transactions.length > 0) {
-            const newTransactions = lastTransactionId ? transactions : transactions.reverse();
-
-            for (const tx of newTransactions) {
+            console.log(`[Transaction Stream] Found ${transactions.length} new transaction(s) for user ${userId}`);
+            for (const tx of transactions) {
+              if (seenTransactionIds.has(tx.id)) {
+                continue;
+              }
+              
+              seenTransactionIds.add(tx.id);
               const toNumber = (value: string | number | null) => Number(value ?? 0);
               controller.enqueue(
                 encoder.encode(
@@ -138,11 +160,14 @@ export async function GET(request: Request) {
                   })}\n\n`
                 )
               );
-              lastTransactionId = tx.id;
+              
+              if (tx.created_at > lastTransactionTimestamp) {
+                lastTransactionTimestamp = tx.created_at;
+              }
             }
           }
         } catch (error) {
-          console.error("Error polling transactions:", error);
+          console.error("[Transaction Stream] Error polling transactions:", error);
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
@@ -167,8 +192,7 @@ export async function GET(request: Request) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
-      ...corsHeaders,
+      ...getCorsHeaders(request),
     },
   });
 }
-
