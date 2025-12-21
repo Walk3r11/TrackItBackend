@@ -3,14 +3,27 @@ import { sql } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
 import { getUserSummary, listCategories, getSavingsGoal } from "@/lib/data";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = [
+    "https://www.trackitco.com",
+    "https://trackitco.com",
+    "http://localhost:3000",
+  ];
+  
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Expose-Headers": "Content-Type",
+  };
+}
 
-export function OPTIONS() {
-  return NextResponse.json({}, { status: 204, headers: corsHeaders });
+export async function OPTIONS(request: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(request) });
 }
 
 async function getTransactions(userId: string) {
@@ -103,6 +116,7 @@ async function authenticateUser(request: Request): Promise<string | null> {
 }
 
 export async function POST(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   try {
     const body = await request.json();
     const {
