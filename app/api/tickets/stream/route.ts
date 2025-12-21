@@ -9,10 +9,9 @@ function getCorsHeaders(request: Request) {
     "https://trackitco.com",
     "http://localhost:3000",
   ];
-
-  const allowOrigin =
-    origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
-
+  
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  
   return {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -23,33 +22,28 @@ function getCorsHeaders(request: Request) {
 }
 
 export function OPTIONS(request: Request) {
-  return NextResponse.json(
-    {},
-    { status: 204, headers: getCorsHeaders(request) }
-  );
+  return NextResponse.json({}, { status: 204, headers: getCorsHeaders(request) });
 }
 
-async function authenticateSupport(
-  request: Request
-): Promise<{ userId: string | null; error?: string }> {
+async function authenticateSupport(request: Request): Promise<{ userId: string | null; error?: string }> {
   const { searchParams } = new URL(request.url);
   const cookieHeader = request.headers.get("cookie");
   const authHeader = request.headers.get("authorization");
-
+  
   let token: string | null = null;
-
+  
   if (authHeader?.startsWith("Bearer ")) {
     token = authHeader.slice(7).trim();
   } else if (cookieHeader) {
     const cookieMatch = cookieHeader.match(/auth-token=([^;]+)/);
     if (cookieMatch) token = cookieMatch[1];
   }
-
+  
   const tokenParam = searchParams.get("token");
   if (!token && tokenParam) {
     token = decodeURIComponent(tokenParam);
   }
-
+  
   if (!token) {
     return { userId: null, error: "No token provided" };
   }
@@ -58,7 +52,7 @@ async function authenticateSupport(
     const JWT_SECRET = new TextEncoder().encode(
       process.env.JWT_SECRET || "trackit-secret"
     );
-
+    
     const { payload } = await jwtVerify(token, JWT_SECRET);
     if (payload.role === "support") {
       const userId = searchParams.get("userId");
@@ -77,34 +71,31 @@ export async function GET(request: Request) {
   const userId = searchParams.get("userId");
 
   if (!userId) {
-    return new Response("Missing userId", {
-      status: 400,
-      headers: corsHeaders,
+    return new Response(JSON.stringify({ error: "Missing userId" }), { 
+      status: 400, 
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 
   const auth = await authenticateSupport(request);
   if (!auth.userId) {
-    return new Response(
-      JSON.stringify({ error: auth.error || "Unauthorized" }),
-      {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return new Response(JSON.stringify({ error: auth.error || "Unauthorized" }), { 
+      status: 401, 
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
   }
   if (auth.userId !== userId) {
-    return new Response(JSON.stringify({ error: "UserId mismatch" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ error: "UserId mismatch" }), { 
+      status: 403, 
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
-      let lastTransactionTimestamp: string | null = null;
-      let seenTransactionIds = new Set<string>();
+      let lastTicketTimestamp: string | null = null;
+      let seenTicketIds = new Set<string>();
       let isActive = true;
 
       controller.enqueue(
@@ -118,74 +109,64 @@ export async function GET(request: Request) {
         }
 
         try {
-          if (!lastTransactionTimestamp) {
-            const latestTx = (await sql`
-              select created_at
-              from transactions
+          if (!lastTicketTimestamp) {
+            const latestTicket = (await sql`
+              select updated_at, created_at
+              from tickets
               where user_id = ${userId}
-              order by created_at desc
+              order by greatest(updated_at, created_at) desc
               limit 1
-            `) as Array<{ created_at: string }>;
-
-            if (latestTx.length > 0) {
-              lastTransactionTimestamp = latestTx[0].created_at;
+            `) as Array<{ updated_at: string; created_at: string }>;
+            
+            if (latestTicket.length > 0) {
+              const latest = latestTicket[0];
+              lastTicketTimestamp = latest.updated_at > latest.created_at ? latest.updated_at : latest.created_at;
             }
             return;
           }
 
-          const transactions = (await sql`
-            select 
-              t.id,
-              t.user_id,
-              t.card_id,
-              t.amount,
-              t.category_id,
-              c.name as category_name,
-              c.color as category_color,
-              t.created_at
-            from transactions t
-            left join categories c on c.id = t.category_id
-            where t.user_id = ${userId}
-              and t.created_at > ${lastTransactionTimestamp}
-            order by t.created_at asc
+          const tickets = (await sql`
+            select id, user_id, subject, status, priority, updated_at, created_at
+            from tickets
+            where user_id = ${userId}
+              and (updated_at > ${lastTicketTimestamp} or created_at > ${lastTicketTimestamp})
+            order by greatest(updated_at, created_at) asc
           `) as Array<{
             id: string;
             user_id: string;
-            card_id: string;
-            amount: string | number | null;
-            category_id: string | null;
-            category_name: string | null;
-            category_color: string | null;
+            subject: string;
+            status: string;
+            priority: string | null;
+            updated_at: string;
             created_at: string;
           }>;
 
-          if (transactions.length > 0) {
-            for (const tx of transactions) {
-              if (seenTransactionIds.has(tx.id)) {
+          if (tickets.length > 0) {
+            for (const ticket of tickets) {
+              if (seenTicketIds.has(ticket.id)) {
                 continue;
               }
-
-              seenTransactionIds.add(tx.id);
-              const toNumber = (value: string | number | null) =>
-                Number(value ?? 0);
+              
+              seenTicketIds.add(ticket.id);
               controller.enqueue(
                 encoder.encode(
                   `data: ${JSON.stringify({
-                    type: "transaction",
-                    transaction: {
-                      id: tx.id,
-                      title: tx.category_name ?? "Transaction",
-                      amount: toNumber(tx.amount),
-                      date: tx.created_at,
-                      type: toNumber(tx.amount) >= 0 ? "credit" : "debit",
-                      category: tx.category_name ?? undefined,
+                    type: "ticket",
+                    ticket: {
+                      id: ticket.id,
+                      subject: ticket.subject,
+                      status: ticket.status,
+                      priority: ticket.priority ?? undefined,
+                      updatedAt: ticket.updated_at,
+                      createdAt: ticket.created_at,
                     },
                   })}\n\n`
                 )
               );
-
-              if (tx.created_at > lastTransactionTimestamp) {
-                lastTransactionTimestamp = tx.created_at;
+              
+              const ticketTimestamp = ticket.updated_at > ticket.created_at ? ticket.updated_at : ticket.created_at;
+              if (ticketTimestamp > lastTicketTimestamp) {
+                lastTicketTimestamp = ticketTimestamp;
               }
             }
           }
@@ -218,3 +199,4 @@ export async function GET(request: Request) {
     },
   });
 }
+
