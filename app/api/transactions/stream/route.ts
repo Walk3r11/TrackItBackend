@@ -10,13 +10,14 @@ function getCorsHeaders(request: Request) {
     "http://localhost:3000",
   ];
   
-  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : "*";
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
   
   return {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
     "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Expose-Headers": "Content-Type",
   };
 }
 
@@ -40,7 +41,7 @@ async function authenticateSupport(request: Request): Promise<{ userId: string |
   
   const tokenParam = searchParams.get("token");
   if (!token && tokenParam) {
-    token = tokenParam;
+    token = decodeURIComponent(tokenParam);
   }
   
   if (!token) {
@@ -64,16 +65,18 @@ async function authenticateSupport(request: Request): Promise<{ userId: string |
 }
 
 export async function GET(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
 
   if (!userId) {
-    return new Response("Missing userId", { status: 400 });
+    return new Response("Missing userId", { status: 400, headers: corsHeaders });
   }
 
   const auth = await authenticateSupport(request);
   if (!auth.userId || auth.userId !== userId) {
-    return new Response("Unauthorized", { status: 401 });
+    console.error(`[Transaction Stream] Auth failed - userId: ${userId}, auth.userId: ${auth.userId}`);
+    return new Response("Unauthorized", { status: 401, headers: corsHeaders });
   }
 
   const stream = new ReadableStream({

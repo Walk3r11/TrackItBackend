@@ -10,13 +10,14 @@ function getCorsHeaders(request: Request) {
     "http://localhost:3000",
   ];
   
-  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : "*";
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
   
   return {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
     "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Expose-Headers": "Content-Type",
   };
 }
 
@@ -83,9 +84,10 @@ export async function GET(
   request: Request,
   { params }: { params: { ticketId: string } }
 ) {
+  const corsHeaders = getCorsHeaders(request);
   const ticketId = params.ticketId;
   if (!ticketId) {
-    return new Response("Missing ticketId", { status: 400 });
+    return new Response("Missing ticketId", { status: 400, headers: corsHeaders });
   }
 
   const { searchParams } = new URL(request.url);
@@ -93,7 +95,7 @@ export async function GET(
 
   const auth = await authenticateUser(request);
   if (!auth.userId) {
-    return new Response("Unauthorized", { status: 401 });
+    return new Response("Unauthorized", { status: 401, headers: corsHeaders });
   }
 
   const ticketRows = (await sql`
@@ -101,16 +103,16 @@ export async function GET(
   `) as Array<{ user_id: string }>;
 
   if (!ticketRows[0]) {
-    return new Response("Ticket not found", { status: 404 });
+    return new Response("Ticket not found", { status: 404, headers: corsHeaders });
   }
 
   if (auth.isSupport) {
     if (ticketRows[0].user_id !== supportUserId) {
-      return new Response("Ticket user mismatch", { status: 403 });
+      return new Response("Ticket user mismatch", { status: 403, headers: corsHeaders });
     }
   } else {
     if (ticketRows[0].user_id !== auth.userId) {
-      return new Response("Ticket not found or access denied", { status: 403 });
+      return new Response("Ticket not found or access denied", { status: 403, headers: corsHeaders });
     }
   }
 

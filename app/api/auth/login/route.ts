@@ -98,7 +98,7 @@ export async function POST(request: Request) {
   const tokenHash = hashToken(sessionToken);
   await sql`
     insert into auth_sessions (user_id, token_hash, expires_at)
-    values (${authRow.id}, ${tokenHash}, now() + interval '2 months')
+    values (${authRow.id}, ${tokenHash}, now() + interval '1 hour')
   `;
   return NextResponse.json({ token: sessionToken, user }, { status: 200 });
 }
