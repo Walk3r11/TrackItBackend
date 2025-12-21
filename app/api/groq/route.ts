@@ -110,7 +110,7 @@ async function authenticateUser(request: Request): Promise<string | null> {
       if (payload.role === "support") {
         return null;
       }
-    } catch {}
+    } catch { }
 
     const tokenHash = hashToken(token);
     const rows = (await sql`
@@ -142,11 +142,14 @@ export async function POST(request: Request) {
       messages,
       model,
       temperature,
+      max_completion_tokens,
       max_tokens,
       top_p,
       frequency_penalty,
       presence_penalty,
       stream,
+      stop,
+      reasoning_effort,
     } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -179,7 +182,7 @@ export async function POST(request: Request) {
           if (payload.role === "support" && body.userId) {
             userId = body.userId as string;
           }
-        } catch {}
+        } catch { }
       }
     }
 
@@ -228,28 +231,26 @@ export async function POST(request: Request) {
 - Monthly Spending: $${userContext.monthlySpend.toFixed(2)}
 
 **Savings Goal:**
-- Target: $${userContext.savingsGoal.amount.toFixed(2)} per ${
-      userContext.savingsGoal.period
-    }
+- Target: $${userContext.savingsGoal.amount.toFixed(2)} per ${userContext.savingsGoal.period
+      }
 
 **Categories:**
 ${userContext.categories
-  .map((c) => `- ${c.name}${c.color ? ` (${c.color})` : ""}`)
-  .join("\n")}
+        .map((c) => `- ${c.name}${c.color ? ` (${c.color})` : ""}`)
+        .join("\n")}
 
 **Recent Transactions (last 20):**
-${
-  userContext.recentTransactions.length > 0
-    ? userContext.recentTransactions
-        .map(
-          (t) =>
-            `- $${t.amount.toFixed(2)} in "${t.category}" on ${new Date(
-              t.createdAt
-            ).toLocaleDateString()}`
-        )
-        .join("\n")
-    : "No transactions yet"
-}
+${userContext.recentTransactions.length > 0
+        ? userContext.recentTransactions
+          .map(
+            (t) =>
+              `- $${t.amount.toFixed(2)} in "${t.category}" on ${new Date(
+                t.createdAt
+              ).toLocaleDateString()}`
+          )
+          .join("\n")
+        : "No transactions yet"
+      }
 
 Use this data to provide personalized financial advice and answer questions about the user's finances. Always reference specific amounts, categories, and transactions when relevant.`;
 
@@ -299,15 +300,15 @@ Remember: Your purpose is to help users manage their finances and use the TrackI
     const processedMessages =
       messages[0]?.role === "system"
         ? [
-            systemMessage,
-            { role: "user" as const, content: userDataMessage },
-            ...messages.slice(1),
-          ]
+          systemMessage,
+          { role: "user" as const, content: userDataMessage },
+          ...messages.slice(1),
+        ]
         : [
-            systemMessage,
-            { role: "user" as const, content: userDataMessage },
-            ...messages,
-          ];
+          systemMessage,
+          { role: "user" as const, content: userDataMessage },
+          ...messages,
+        ];
 
     const groqResponse = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
@@ -321,11 +322,11 @@ Remember: Your purpose is to help users manage their finances and use the TrackI
           model: model || "openai/gpt-oss-120b",
           messages: processedMessages,
           temperature: temperature ?? 1,
-          max_completion_tokens: max_tokens ?? 8192,
+          max_completion_tokens: max_completion_tokens ?? max_tokens ?? 8192,
           top_p: top_p ?? 1,
-          reasoning_effort: "medium",
-          stream: stream ?? false,
-          stop: null,
+          reasoning_effort: reasoning_effort || "medium",
+          stream: stream ?? true,
+          stop: stop ?? null,
         }),
       }
     );
@@ -338,11 +339,84 @@ Remember: Your purpose is to help users manage their finances and use the TrackI
       );
     }
 
-    const data = await groqResponse.json();
-    console.log("[Groq API] Groq response received, returning data");
-    const response = NextResponse.json(data, { headers: corsHeaders });
-    console.log("[Groq API] Response created, status:", response.status);
-    return response;
+    const shouldStream = stream ?? true;
+
+    if (shouldStream && groqResponse.body) {
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+
+      const responseStream = new ReadableStream({
+        async start(controller) {
+          try {
+            const reader = groqResponse.body!.getReader();
+            let buffer = "";
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+
+              for (const line of lines) {
+                if (line.trim() === "") continue;
+                if (line.startsWith("data: ")) {
+                  const data = line.slice(6);
+                  if (data === "[DONE]") {
+                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                    controller.close();
+                    return;
+                  }
+                  controller.enqueue(encoder.encode(`${line}\n`));
+                } else {
+                  controller.enqueue(encoder.encode(`${line}\n`));
+                }
+              }
+            }
+
+            if (buffer.trim()) {
+              const lines = buffer.split("\n");
+              for (const line of lines) {
+                if (line.trim() === "") continue;
+                if (line.startsWith("data: ")) {
+                  const data = line.slice(6);
+                  if (data === "[DONE]") {
+                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                    controller.close();
+                    return;
+                  }
+                  controller.enqueue(encoder.encode(`${line}\n`));
+                } else {
+                  controller.enqueue(encoder.encode(`${line}\n`));
+                }
+              }
+            }
+
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          } catch (error) {
+            console.error("[Groq API] Stream error:", error);
+            controller.error(error);
+          }
+        },
+      });
+
+      return new Response(responseStream, {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    } else {
+      const data = await groqResponse.json();
+      console.log("[Groq API] Groq response received, returning data");
+      const response = NextResponse.json(data, { headers: corsHeaders });
+      console.log("[Groq API] Response created, status:", response.status);
+      return response;
+    }
   } catch (error) {
     console.error("[Groq API] Error:", error);
     const errorMessage =
