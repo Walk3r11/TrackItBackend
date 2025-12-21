@@ -1,0 +1,192 @@
+import { NextResponse } from "next/server";
+import { sql } from "@/lib/db";
+import { hashToken } from "@/lib/tokens";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export function OPTIONS() {
+  return NextResponse.json({}, { status: 204, headers: corsHeaders });
+}
+
+async function authenticateUser(request: Request): Promise<{ userId: string | null; isSupport: boolean }> {
+  const cookieHeader = request.headers.get("cookie");
+  const { searchParams } = new URL(request.url);
+  const supportUserId = searchParams.get("supportUserId");
+
+  let token: string | null = null;
+
+  if (cookieHeader) {
+    const cookieMatch = cookieHeader.match(/auth-token=([^;]+)/);
+    if (cookieMatch) token = cookieMatch[1];
+  }
+
+  if (!token) {
+    return { userId: null, isSupport: false };
+  }
+
+  try {
+    const { jwtVerify } = await import("jose");
+    const JWT_SECRET = new TextEncoder().encode(
+      process.env.JWT_SECRET
+    );
+
+    try {
+      const { payload } = await jwtVerify(token, JWT_SECRET);
+      if (payload.role === "support" && supportUserId) {
+        return { userId: supportUserId, isSupport: true };
+      }
+    } catch {
+    }
+
+    const tokenHash = hashToken(token);
+    const rows = (await sql`
+      select u.id as user_id
+      from auth_sessions s
+      join users u on u.id = s.user_id
+      where s.token_hash = ${tokenHash}
+        and s.revoked_at is null
+        and s.expires_at > now()
+      limit 1
+    `) as Array<{ user_id: string }>;
+
+    return { userId: rows[0]?.user_id ?? null, isSupport: false };
+  } catch {
+    return { userId: null, isSupport: false };
+  }
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: { ticketId: string } }
+) {
+  const ticketId = params.ticketId;
+  if (!ticketId) {
+    return new Response("Missing ticketId", { status: 400 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const supportUserId = searchParams.get("supportUserId");
+
+  const auth = await authenticateUser(request);
+  if (!auth.userId) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const ticketRows = (await sql`
+    select user_id from tickets where id = ${ticketId} limit 1
+  `) as Array<{ user_id: string }>;
+
+  if (!ticketRows[0]) {
+    return new Response("Ticket not found", { status: 404 });
+  }
+
+  if (auth.isSupport) {
+    if (ticketRows[0].user_id !== supportUserId) {
+      return new Response("Ticket user mismatch", { status: 403 });
+    }
+  } else {
+    if (ticketRows[0].user_id !== auth.userId) {
+      return new Response("Ticket not found or access denied", { status: 403 });
+    }
+  }
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      let lastMessageId: string | null = null;
+      let isActive = true;
+
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify({ type: "connected" })}\n\n`)
+      );
+
+      const pollInterval = setInterval(async () => {
+        if (!isActive) {
+          clearInterval(pollInterval);
+          return;
+        }
+
+        try {
+          const query = lastMessageId
+            ? sql`
+                select 
+                  id,
+                  ticket_id,
+                  user_id,
+                  sender_type,
+                  content,
+                  created_at
+                from ticket_messages
+                where ticket_id = ${ticketId}
+                  and id > ${lastMessageId}
+                order by created_at asc
+              `
+            : sql`
+                select 
+                  id,
+                  ticket_id,
+                  user_id,
+                  sender_type,
+                  content,
+                  created_at
+                from ticket_messages
+                where ticket_id = ${ticketId}
+                order by created_at desc
+                limit 1
+              `;
+
+          const messages = (await query) as Array<{
+            id: string;
+            ticket_id: string;
+            user_id: string | null;
+            sender_type: "user" | "support";
+            content: string;
+            created_at: string;
+          }>;
+
+          if (messages.length > 0) {
+            const newMessages = lastMessageId ? messages : messages.reverse();
+
+            for (const message of newMessages) {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({ type: "message", message })}\n\n`
+                )
+              );
+              lastMessageId = message.id;
+            }
+          }
+        } catch (error) {
+          console.error("Error polling messages:", error);
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: "error",
+                error: "Polling failed",
+              })}\n\n`
+            )
+          );
+        }
+      }, 2000);
+
+      request.signal.addEventListener("abort", () => {
+        isActive = false;
+        clearInterval(pollInterval);
+        controller.close();
+      });
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      ...corsHeaders,
+    },
+  });
+}

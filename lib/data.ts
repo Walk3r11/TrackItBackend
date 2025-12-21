@@ -194,6 +194,41 @@ export async function createAppUser(input: {
   return user;
 }
 
+type SupportUserAuthRow = {
+  id: string;
+  email: string;
+  password_hash: string;
+  name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+};
+
+export async function getSupportUserAuth(email: string) {
+  try {
+    const supportRows = (await sql`
+      select id, email, password_hash, name, first_name, last_name
+      from support_users
+      where lower(email) = ${email.trim().toLowerCase()}
+      limit 1
+    `) as SupportUserAuthRow[];
+
+    if (supportRows[0]) {
+      return supportRows[0];
+    }
+  } catch {
+  }
+
+  const userRows = (await sql`
+    select id, email, password_hash, name, first_name, last_name
+    from users
+    where lower(email) = ${email.trim().toLowerCase()}
+      and (role = 'support' or is_support = true)
+    limit 1
+  `) as SupportUserAuthRow[];
+  
+  return userRows[0] ?? null;
+}
+
 const normalizeCategoryName = (name: string) =>
   name
     .trim()
