@@ -10,9 +10,10 @@ function getCorsHeaders(request: Request) {
     "https://trackitco.com",
     "http://localhost:3000",
   ];
-  
-  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
-  
+
+  const allowOrigin =
+    origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
   return {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -23,7 +24,10 @@ function getCorsHeaders(request: Request) {
 }
 
 export async function OPTIONS(request: Request) {
-  return new NextResponse(null, { status: 204, headers: getCorsHeaders(request) });
+  return new NextResponse(null, {
+    status: 204,
+    headers: getCorsHeaders(request),
+  });
 }
 
 async function getTransactions(userId: string) {
@@ -66,38 +70,35 @@ async function getTransactions(userId: string) {
 async function authenticateUser(request: Request): Promise<string | null> {
   const authHeader = request.headers.get("authorization");
   const cookieHeader = request.headers.get("cookie");
-  
+
   let token: string | null = null;
-  
+
   if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
     token = authHeader.slice(7).trim();
   }
-  
+
   if (!token && cookieHeader) {
     const cookieMatch = cookieHeader.match(/auth-token=([^;]+)/);
     if (cookieMatch) {
       token = cookieMatch[1];
     }
   }
-  
+
   if (!token) {
     return null;
   }
 
   try {
     const { jwtVerify } = await import("jose");
-    const JWT_SECRET = new TextEncoder().encode(
-      process.env.JWT_SECRET
-    );
-    
+    const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
+
     try {
       const { payload } = await jwtVerify(token, JWT_SECRET);
       if (payload.role === "support") {
         return null;
       }
-    } catch {
-    }
-    
+    } catch {}
+
     const tokenHash = hashToken(token);
     const rows = (await sql`
       select u.id as user_id
@@ -138,38 +139,38 @@ export async function POST(request: Request) {
     }
 
     let userId = await authenticateUser(request);
-    
+
     if (!userId) {
       const authHeader = request.headers.get("authorization");
       const cookieHeader = request.headers.get("cookie");
       let token: string | null = null;
-      
+
       if (authHeader?.startsWith("Bearer ")) {
         token = authHeader.slice(7).trim();
       } else if (cookieHeader) {
         const cookieMatch = cookieHeader.match(/auth-token=([^;]+)/);
         if (cookieMatch) token = cookieMatch[1];
       }
-      
+
       if (token) {
         try {
           const { jwtVerify } = await import("jose");
-          const JWT_SECRET = new TextEncoder().encode(
-            process.env.JWT_SECRET
-          );
+          const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
           const { payload } = await jwtVerify(token, JWT_SECRET);
-          
+
           if (payload.role === "support" && body.userId) {
             userId = body.userId as string;
           }
-        } catch {
-        }
+        } catch {}
       }
     }
-    
+
     if (!userId) {
       return NextResponse.json(
-        { error: "Unauthorized. Please provide a valid session token or support credentials with userId." },
+        {
+          error:
+            "Unauthorized. Please provide a valid session token or support credentials with userId.",
+        },
         { status: 401, headers: corsHeaders }
       );
     }
