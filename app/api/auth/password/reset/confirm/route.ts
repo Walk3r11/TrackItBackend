@@ -34,11 +34,18 @@ const allowedOrigins = (() => {
 })();
 
 function getCorsHeaders(origin: string | null) {
-  const resolvedOrigin = origin && allowedOrigins.has(origin) ? origin : appUrl ?? origin ?? "*";
+  const allowedOriginsList = [
+    "https://www.trackitco.com",
+    "https://trackitco.com",
+    "http://localhost:3000",
+  ];
+  
+  const resolvedOrigin = origin && allowedOriginsList.includes(origin) ? origin : allowedOriginsList[0];
   return {
     "Access-Control-Allow-Origin": resolvedOrigin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
   };
 }
 

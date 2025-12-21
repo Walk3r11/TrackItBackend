@@ -7,12 +7,35 @@ type Payload = {
   email?: string;
 };
 
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = [
+    "https://www.trackitco.com",
+    "https://trackitco.com",
+    "http://localhost:3000",
+  ];
+  
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
+
+export async function OPTIONS(request: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(request) });
+}
+
 export async function POST(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   const body = (await request.json().catch(() => ({}))) as Payload;
   const email = body.email?.trim().toLowerCase();
 
   if (!email) {
-    return NextResponse.json({ error: "Missing email" }, { status: 400 });
+    return NextResponse.json({ error: "Missing email" }, { status: 400, headers: corsHeaders });
   }
 
   try {
@@ -25,7 +48,7 @@ export async function POST(request: Request) {
 
     const user = users[0];
     if (!user) {
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true }, { headers: corsHeaders });
     }
 
     const token = generateResetToken();
@@ -47,8 +70,8 @@ export async function POST(request: Request) {
       text: `Reset your password: ${resetUrl} (expires in 1 hour)`
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true }, { headers: corsHeaders });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to send reset email" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to send reset email" }, { status: 500, headers: corsHeaders });
   }
 }
