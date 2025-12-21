@@ -26,6 +26,14 @@ export async function OPTIONS(request: Request) {
 export async function POST(request: Request) {
   const corsHeaders = getCorsHeaders(request);
   const response = NextResponse.json({ success: true }, { headers: corsHeaders });
-  response.cookies.delete("auth-token");
+  
+  response.cookies.set("auth-token", "", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    maxAge: 0,
+    path: "/",
+  });
+  
   return response;
 }
