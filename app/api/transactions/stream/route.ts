@@ -25,7 +25,7 @@ export function OPTIONS(request: Request) {
   return NextResponse.json({}, { status: 204, headers: getCorsHeaders(request) });
 }
 
-async function authenticateSupport(request: Request): Promise<{ userId: string | null }> {
+async function authenticateSupport(request: Request): Promise<{ userId: string | null; error?: string }> {
   const { searchParams } = new URL(request.url);
   const cookieHeader = request.headers.get("cookie");
   const authHeader = request.headers.get("authorization");
@@ -45,23 +45,28 @@ async function authenticateSupport(request: Request): Promise<{ userId: string |
   }
   
   if (!token) {
-    return { userId: null };
+    console.error("[Transaction Stream] No token found in request");
+    return { userId: null, error: "No token provided" };
   }
 
   try {
     const JWT_SECRET = new TextEncoder().encode(
-      process.env.JWT_SECRET
+      process.env.JWT_SECRET || "trackit-secret"
     );
     
     const { payload } = await jwtVerify(token, JWT_SECRET);
     if (payload.role === "support") {
       const userId = searchParams.get("userId");
+      console.log(`[Transaction Stream] Authenticated support user, userId: ${userId}`);
       return { userId: userId || null };
+    } else {
+      console.error(`[Transaction Stream] Token does not have support role, role: ${payload.role}`);
+      return { userId: null, error: "Not a support user" };
     }
-  } catch {
+  } catch (error) {
+    console.error("[Transaction Stream] JWT verification failed:", error);
+    return { userId: null, error: "Invalid token" };
   }
-  
-  return { userId: null };
 }
 
 export async function GET(request: Request) {
@@ -74,9 +79,19 @@ export async function GET(request: Request) {
   }
 
   const auth = await authenticateSupport(request);
-  if (!auth.userId || auth.userId !== userId) {
-    console.error(`[Transaction Stream] Auth failed - userId: ${userId}, auth.userId: ${auth.userId}`);
-    return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+  if (!auth.userId) {
+    console.error(`[Transaction Stream] Auth failed - userId: ${userId}, error: ${auth.error}`);
+    return new Response(JSON.stringify({ error: auth.error || "Unauthorized" }), { 
+      status: 401, 
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
+  if (auth.userId !== userId) {
+    console.error(`[Transaction Stream] UserId mismatch - requested: ${userId}, auth: ${auth.userId}`);
+    return new Response(JSON.stringify({ error: "UserId mismatch" }), { 
+      status: 403, 
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
   }
 
   const stream = new ReadableStream({
