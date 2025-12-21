@@ -30,6 +30,16 @@ export async function OPTIONS(request: Request) {
   });
 }
 
+export async function GET(request: Request) {
+  return NextResponse.json(
+    { message: "Groq API endpoint is working" },
+    {
+      status: 200,
+      headers: getCorsHeaders(request),
+    }
+  );
+}
+
 async function getTransactions(userId: string) {
   const rows = (await sql`
     select
