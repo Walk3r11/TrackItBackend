@@ -3,6 +3,9 @@ import { sql } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
 import { getUserSummary, listCategories, getSavingsGoal } from "@/lib/data";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
   const allowedOrigins = [
@@ -128,6 +131,9 @@ async function authenticateUser(request: Request): Promise<string | null> {
 
 export async function POST(request: Request) {
   const corsHeaders = getCorsHeaders(request);
+
+  console.log("[Groq API] POST handler called");
+
   try {
     console.log("[Groq API] POST request received");
     const body = await request.json();
@@ -195,12 +201,13 @@ export async function POST(request: Request) {
       );
     }
 
+    const finalUserId = userId;
     const [userSummary, transactions, categories, savingsGoal] =
       await Promise.all([
-        getUserSummary(userId),
-        getTransactions(userId),
-        listCategories(userId),
-        getSavingsGoal(userId),
+        getUserSummary(finalUserId),
+        getTransactions(finalUserId),
+        listCategories(finalUserId),
+        getSavingsGoal(finalUserId),
       ]);
 
     const userContext = {
@@ -311,14 +318,14 @@ Remember: Your purpose is to help users manage their finances and use the TrackI
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: model || "llama-4-scout-17b-16e",
+          model: model || "openai/gpt-oss-120b",
           messages: processedMessages,
-          temperature: temperature ?? 0.7,
-          max_tokens: max_tokens ?? 32768,
-          top_p: top_p ?? 0.9,
-          frequency_penalty: frequency_penalty ?? 0.1,
-          presence_penalty: presence_penalty ?? 0.1,
+          temperature: temperature ?? 1,
+          max_completion_tokens: max_tokens ?? 8192,
+          top_p: top_p ?? 1,
+          reasoning_effort: "medium",
           stream: stream ?? false,
+          stop: null,
         }),
       }
     );
@@ -338,10 +345,12 @@ Remember: Your purpose is to help users manage their finances and use the TrackI
     return response;
   } catch (error) {
     console.error("[Groq API] Error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     const errorResponse = NextResponse.json(
       {
         error: "Failed to process request",
-        details: error instanceof Error ? error.message : "Unknown error",
+        details: errorMessage,
       },
       { status: 500, headers: corsHeaders }
     );
