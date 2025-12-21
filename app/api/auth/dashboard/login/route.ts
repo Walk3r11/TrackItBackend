@@ -7,15 +7,40 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET
 );
 
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = [
+    "https://www.trackitco.com",
+    "https://trackitco.com",
+    "http://localhost:3000",
+  ];
+  
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Expose-Headers": "Content-Type",
+  };
+}
+
+export function OPTIONS(request: Request) {
+  return NextResponse.json({}, { status: 204, headers: getCorsHeaders(request) });
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { email, password } = body;
 
+    const corsHeaders = getCorsHeaders(request);
+
     if (!email || !password) {
       return NextResponse.json(
         { error: "Email and password are required" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -24,7 +49,7 @@ export async function POST(request: Request) {
     if (!supportUser) {
       return NextResponse.json(
         { error: "Invalid email or password" },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -33,7 +58,7 @@ export async function POST(request: Request) {
     if (!isValid) {
       return NextResponse.json(
         { error: "Invalid email or password" },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -47,7 +72,7 @@ export async function POST(request: Request) {
       .setExpirationTime("24h")
       .sign(JWT_SECRET);
 
-    const response = NextResponse.json({ success: true, token }, { status: 200 });
+    const response = NextResponse.json({ success: true, token }, { status: 200, headers: corsHeaders });
     
     response.cookies.set("auth-token", token, {
       httpOnly: true,
@@ -59,9 +84,10 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
+    const corsHeaders = getCorsHeaders(request);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
