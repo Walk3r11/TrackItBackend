@@ -129,7 +129,9 @@ async function authenticateUser(request: Request): Promise<string | null> {
 export async function POST(request: Request) {
   const corsHeaders = getCorsHeaders(request);
   try {
+    console.log("[Groq API] POST request received");
     const body = await request.json();
+    console.log("[Groq API] Body parsed, userId:", body.userId);
     const {
       messages,
       model,
@@ -330,15 +332,23 @@ Remember: Your purpose is to help users manage their finances and use the TrackI
     }
 
     const data = await groqResponse.json();
-    return NextResponse.json(data, { headers: corsHeaders });
+    console.log("[Groq API] Groq response received, returning data");
+    const response = NextResponse.json(data, { headers: corsHeaders });
+    console.log("[Groq API] Response created, status:", response.status);
+    return response;
   } catch (error) {
-    console.error("Groq API error:", error);
-    return NextResponse.json(
+    console.error("[Groq API] Error:", error);
+    const errorResponse = NextResponse.json(
       {
         error: "Failed to process request",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500, headers: corsHeaders }
     );
+    console.log(
+      "[Groq API] Error response created, status:",
+      errorResponse.status
+    );
+    return errorResponse;
   }
 }
