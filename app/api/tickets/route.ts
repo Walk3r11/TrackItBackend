@@ -3,6 +3,7 @@ import { getUserTickets } from "@/lib/data";
 import { sql } from "@/lib/db";
 import { randomUUID } from "crypto";
 import { jwtVerify } from "jose";
+import { hashToken } from "@/lib/tokens";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -23,7 +24,36 @@ function getCorsHeaders(request: Request) {
   };
 }
 
-async function authenticateSupport(request: Request): Promise<{ authenticated: boolean; error?: string }> {
+async function authenticateUser(request: Request): Promise<string | null> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
+    return null;
+  }
+
+  const token = authHeader.slice(7).trim();
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const tokenHash = hashToken(token);
+    const rows = (await sql`
+      select u.id as user_id
+      from auth_sessions s
+      join users u on u.id = s.user_id
+      where s.token_hash = ${tokenHash}
+        and s.revoked_at is null
+        and s.expires_at > now()
+      limit 1
+    `) as Array<{ user_id: string }>;
+
+    return rows[0]?.user_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function authenticateSupport(request: Request): Promise<{ authenticated: boolean; error?: string; userId?: string }> {
   const cookieHeader = request.headers.get("cookie");
   const authHeader = request.headers.get("authorization");
   
@@ -49,9 +79,17 @@ async function authenticateSupport(request: Request): Promise<{ authenticated: b
     if (payload.role === "support") {
       return { authenticated: true };
     } else {
+      const userId = await authenticateUser(request);
+      if (userId) {
+        return { authenticated: true, userId };
+      }
       return { authenticated: false, error: "Not a support user" };
     }
   } catch (error) {
+    const userId = await authenticateUser(request);
+    if (userId) {
+      return { authenticated: true, userId };
+    }
     return { authenticated: false, error: "Invalid token" };
   }
 }
@@ -63,25 +101,29 @@ export async function OPTIONS(request: Request) {
 export async function GET(request: Request) {
   const corsHeaders = getCorsHeaders(request);
   
+  const { searchParams } = new URL(request.url);
+  const userIdParam = searchParams.get("userId");
+  const status = searchParams.get("status") ?? undefined;
+  
+  if (!userIdParam) {
+    return NextResponse.json(
+      { error: "Missing userId" },
+      { status: 400, headers: corsHeaders }
+    );
+  }
+
+  const authenticatedUserId = await authenticateUser(request);
   const auth = await authenticateSupport(request);
-  if (!auth.authenticated) {
+  
+  if (!auth.authenticated && (!authenticatedUserId || authenticatedUserId !== userIdParam)) {
     return NextResponse.json(
       { error: auth.error || "Unauthorized" },
       { status: 401, headers: corsHeaders }
     );
   }
 
-  const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId");
-  const status = searchParams.get("status") ?? undefined;
-  if (!userId)
-    return NextResponse.json(
-      { error: "Missing userId" },
-      { status: 400, headers: corsHeaders }
-    );
-
   try {
-    const tickets = await getUserTickets(userId, status ?? undefined);
+    const tickets = await getUserTickets(userIdParam, status ?? undefined);
     return NextResponse.json({ tickets }, { headers: corsHeaders });
   } catch (error) {
     return NextResponse.json(
@@ -122,12 +164,19 @@ export async function POST(request: Request) {
       `;
     }
 
-    const tickets = await getUserTickets(userId, "all");
+    let tickets: Array<{ id: string; userId: string; subject: string; status: "open" | "pending" | "closed"; priority: "low" | "medium" | "high" | null | undefined; updatedAt: string; createdAt: string }> = [];
+    try {
+      tickets = await getUserTickets(userId, "all");
+    } catch (ticketsError) {
+      console.error("Error fetching tickets after creation (non-fatal):", ticketsError);
+    }
+    
     return NextResponse.json(
       { ticketId: id, tickets },
       { status: 201, headers: corsHeaders }
     );
   } catch (error) {
+    console.error("Error creating ticket:", error);
     return NextResponse.json(
       { error: "Failed to create ticket" },
       { status: 500, headers: corsHeaders }
