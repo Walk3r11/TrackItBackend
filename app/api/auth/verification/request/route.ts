@@ -7,6 +7,15 @@ type Payload = {
   email?: string;
 };
 
+const maskEmail = (value: string) => {
+  const trimmed = value.trim();
+  const atIndex = trimmed.indexOf("@");
+  if (atIndex <= 1) {
+    return `***${trimmed.slice(Math.max(atIndex, 0))}`;
+  }
+  return `${trimmed.slice(0, 2)}...${trimmed.slice(atIndex)}`;
+};
+
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as Payload;
   const email = body.email?.trim().toLowerCase();
@@ -14,6 +23,9 @@ export async function POST(request: Request) {
   if (!email) {
     return NextResponse.json({ error: "Missing email" }, { status: 400 });
   }
+
+  const masked = maskEmail(email);
+  console.log(`[auth] verification request received for ${masked}`);
 
   try {
     const users = (await sql`
@@ -24,9 +36,16 @@ export async function POST(request: Request) {
     `) as { id: string; email_verified: boolean | null }[];
 
     const user = users[0];
-    if (!user || user.email_verified) {
+    if (!user) {
+      console.log(`[auth] verification request: no user found for ${masked}`);
       return NextResponse.json({ ok: true });
     }
+
+    console.log(
+      `[auth] issuing verification code for ${masked} (verified=${Boolean(
+        user.email_verified
+      )})`
+    );
 
     await sql`
       update email_verifications
@@ -50,8 +69,10 @@ export async function POST(request: Request) {
       text: `Your verification code is ${code}. It expires in 10 minutes.`
     });
 
+    console.log(`[auth] verification email sent for ${masked}`);
     return NextResponse.json({ ok: true });
   } catch (error) {
+    console.error(`[auth] verification request failed for ${masked}:`, error);
     return NextResponse.json({ error: "Failed to send code" }, { status: 500 });
   }
 }

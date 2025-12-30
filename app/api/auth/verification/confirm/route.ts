@@ -7,6 +7,15 @@ type Payload = {
   code?: string;
 };
 
+const maskEmail = (value: string) => {
+  const trimmed = value.trim();
+  const atIndex = trimmed.indexOf("@");
+  if (atIndex <= 1) {
+    return `***${trimmed.slice(Math.max(atIndex, 0))}`;
+  }
+  return `${trimmed.slice(0, 2)}...${trimmed.slice(atIndex)}`;
+};
+
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as Payload;
   const email = body.email?.trim().toLowerCase();
@@ -15,6 +24,9 @@ export async function POST(request: Request) {
   if (!email || !code) {
     return NextResponse.json({ error: "Missing email or code" }, { status: 400 });
   }
+
+  const masked = maskEmail(email);
+  console.log(`[auth] verification confirm attempt for ${masked} (code length ${code.length})`);
 
   try {
     const users = (await sql`
@@ -26,12 +38,15 @@ export async function POST(request: Request) {
 
     const user = users[0];
     if (!user) {
+      console.log(`[auth] verification confirm: no user found for ${masked}`);
       return NextResponse.json({ error: "Invalid code" }, { status: 400 });
     }
 
-    if (user.email_verified) {
-      return NextResponse.json({ ok: true });
-    }
+    console.log(
+      `[auth] verification confirm: user found for ${masked} (verified=${Boolean(
+        user.email_verified
+      )})`
+    );
 
     const rows = (await sql`
       select id, code_hash, expires_at
@@ -45,11 +60,13 @@ export async function POST(request: Request) {
 
     const record = rows[0];
     if (!record) {
+      console.log(`[auth] verification confirm: no active code for ${masked}`);
       return NextResponse.json({ error: "Invalid code" }, { status: 400 });
     }
 
     const codeHash = hashToken(code);
     if (codeHash !== record.code_hash) {
+      console.log(`[auth] verification confirm: invalid code for ${masked}`);
       return NextResponse.json({ error: "Invalid code" }, { status: 400 });
     }
 
@@ -64,8 +81,10 @@ export async function POST(request: Request) {
       where id = ${user.id}
     `;
 
+    console.log(`[auth] verification confirm: success for ${masked}`);
     return NextResponse.json({ ok: true });
   } catch (error) {
+    console.error(`[auth] verification confirm failed for ${masked}:`, error);
     return NextResponse.json({ error: "Failed to verify code" }, { status: 500 });
   }
 }
