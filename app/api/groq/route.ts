@@ -111,7 +111,7 @@ async function authenticateUser(request: Request): Promise<string | null> {
       if (payload.role === "support") {
         return null;
       }
-    } catch {}
+    } catch { }
 
     const tokenHash = hashToken(token);
     const rows = (await sql`
@@ -183,7 +183,7 @@ export async function POST(request: Request) {
           if (payload.role === "support" && body.userId) {
             userId = body.userId as string;
           }
-        } catch {}
+        } catch { }
       }
     }
 
@@ -236,34 +236,34 @@ export async function POST(request: Request) {
 - Monthly Spending: $${userContext.monthlySpend.toFixed(2)}
 
 **Savings Goal:**
-- Target: $${userContext.savingsGoal.amount.toFixed(2)} per ${
-      userContext.savingsGoal.period
-    }
+- Target: $${userContext.savingsGoal.amount.toFixed(2)} per ${userContext.savingsGoal.period
+      }
 
 **Categories:**
 ${userContext.categories
-  .map((c) => `- ${c.name}${c.color ? ` (${c.color})` : ""}`)
-  .join("\n")}
+        .map((c) => `- ${c.name}${c.color ? ` (${c.color})` : ""}`)
+        .join("\n")}
 
 **Recent Transactions (last 20):**
-${
-  userContext.recentTransactions.length > 0
-    ? userContext.recentTransactions
-        .map(
-          (t) =>
-            `- $${t.amount.toFixed(2)} in "${t.category}" on ${new Date(
-              t.createdAt
-            ).toLocaleDateString()}`
-        )
-        .join("\n")
-    : "No transactions yet"
-}
+${userContext.recentTransactions.length > 0
+        ? userContext.recentTransactions
+          .map(
+            (t) =>
+              `- $${t.amount.toFixed(2)} in "${t.category}" on ${new Date(
+                t.createdAt
+              ).toLocaleDateString()}`
+          )
+          .join("\n")
+        : "No transactions yet"
+      }
 
 Use this data to provide personalized financial advice and answer questions about the user's finances. Always reference specific amounts, categories, and transactions when relevant.`;
 
     const systemMessage = {
       role: "system",
       content: `You are a financial assistant for TrackIt, a personal finance and budgeting app. Your role is STRICTLY LIMITED to finance and app-related assistance.
+
+IMPORTANT: Keep your responses CONCISE and ACTIONABLE. Focus on key insights and specific recommendations. Avoid lengthy explanations unless specifically requested. Aim for 2-4 sentences for most answers, and use bullet points or tables when presenting multiple items.
 
 CRITICAL RULES - NEVER VIOLATE THESE:
 1. You MUST ONLY answer questions and provide assistance related to:
@@ -307,25 +307,24 @@ Remember: Your purpose is to help users manage their finances and use the TrackI
     const processedMessages =
       messages[0]?.role === "system"
         ? [
-            systemMessage,
-            { role: "user" as const, content: userDataMessage },
-            ...messages.slice(1),
-          ]
+          systemMessage,
+          { role: "user" as const, content: userDataMessage },
+          ...messages.slice(1),
+        ]
         : [
-            systemMessage,
-            { role: "user" as const, content: userDataMessage },
-            ...messages,
-          ];
+          systemMessage,
+          { role: "user" as const, content: userDataMessage },
+          ...messages,
+        ];
 
     const shouldStream = stream ?? true;
 
     if (shouldStream) {
-      // Handle streaming response using Groq SDK
       const completion = await groq.chat.completions.create({
         model: model || "openai/gpt-oss-120b",
         messages: processedMessages,
         temperature: temperature ?? 1,
-        max_completion_tokens: max_completion_tokens ?? max_tokens ?? 8192,
+        max_completion_tokens: max_completion_tokens ?? max_tokens ?? 4096,
         top_p: top_p ?? 1,
         reasoning_effort: reasoning_effort || "medium",
         stream: true,
@@ -369,12 +368,11 @@ Remember: Your purpose is to help users manage their finances and use the TrackI
         },
       });
     } else {
-      // Handle non-streaming response
       const completion = await groq.chat.completions.create({
         model: model || "openai/gpt-oss-120b",
         messages: processedMessages,
         temperature: temperature ?? 1,
-        max_completion_tokens: max_completion_tokens ?? max_tokens ?? 8192,
+        max_completion_tokens: max_completion_tokens ?? max_tokens ?? 4096,
         top_p: top_p ?? 1,
         reasoning_effort: reasoning_effort || "medium",
         stream: false,
