@@ -18,7 +18,7 @@ function getCorsHeaders(request: Request) {
 
   return {
     "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Expose-Headers": "Content-Type",
@@ -164,6 +164,36 @@ export async function POST(request: Request) {
       on conflict (user_id) do update
       set messages = ${JSON.stringify(messages)},
           updated_at = now()
+    `;
+
+    return NextResponse.json(
+      { success: true },
+      { status: 200, headers: corsHeaders }
+    );
+  } catch (error) {
+    console.error("[Chat History API] Error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
+
+  try {
+    const userId = await authenticateUser(request);
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
+    await sql`
+      delete from chat_history
+      where user_id = ${userId}
     `;
 
     return NextResponse.json(
