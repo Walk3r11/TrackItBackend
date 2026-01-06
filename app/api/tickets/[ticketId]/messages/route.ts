@@ -3,14 +3,28 @@ import { sql } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
 import { randomUUID } from "crypto";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = [
+    "https://www.trackitco.com",
+    "https://trackitco.com",
+    "http://localhost:3000",
+  ];
+  
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+  
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Expose-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
-export function OPTIONS() {
-  return NextResponse.json({}, { status: 204, headers: corsHeaders });
+export function OPTIONS(request: Request) {
+  return NextResponse.json({}, { status: 204, headers: getCorsHeaders(request) });
 }
 
 async function authenticateUser(request: Request): Promise<string | null> {
@@ -46,6 +60,7 @@ export async function GET(
   request: Request,
   { params }: { params: { ticketId: string } }
 ) {
+  const corsHeaders = getCorsHeaders(request);
   const ticketId = params.ticketId;
   if (!ticketId) {
     return NextResponse.json(
@@ -127,6 +142,7 @@ export async function POST(
   request: Request,
   { params }: { params: { ticketId: string } }
 ) {
+  const corsHeaders = getCorsHeaders(request);
   const ticketId = params.ticketId;
   if (!ticketId) {
     return NextResponse.json(
