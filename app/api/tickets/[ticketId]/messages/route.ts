@@ -200,7 +200,11 @@ export async function POST(
 
     await sql`
       update tickets 
-      set updated_at = now()
+      set updated_at = now(),
+          status = case 
+            when status = 'pending' and ${sender_type} = 'support' then 'open'
+            else status
+          end
       where id = ${ticketId}
     `;
 

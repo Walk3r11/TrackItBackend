@@ -103,6 +103,18 @@ export async function getUserTickets(userId: string, status?: string) {
   return rows.map(mapTicket);
 }
 
+export async function getAllTickets(status?: string) {
+  const whereStatus = status && status !== "all" ? sql`where status = ${status}` : sql``;
+  const rows = (await sql`
+    select id, user_id, subject, status, priority, updated_at, created_at
+    from tickets
+    ${whereStatus}
+    order by updated_at desc
+    limit 100
+  `) as TicketRow[];
+  return rows.map(mapTicket);
+}
+
 export async function getUserSeries(userId: string) {
   const rows = (await sql`
     with buckets as (

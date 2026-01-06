@@ -53,7 +53,7 @@ async function authenticateUser(request: Request): Promise<string | null> {
   }
 }
 
-async function authenticateSupport(request: Request): Promise<{ authenticated: boolean; error?: string; userId?: string }> {
+async function authenticateSupport(request: Request): Promise<{ authenticated: boolean; error?: string; userId?: string; isSupport?: boolean }> {
   const cookieHeader = request.headers.get("cookie");
   const authHeader = request.headers.get("authorization");
   
@@ -77,18 +77,18 @@ async function authenticateSupport(request: Request): Promise<{ authenticated: b
     
     const { payload } = await jwtVerify(token, JWT_SECRET);
     if (payload.role === "support") {
-      return { authenticated: true };
+      return { authenticated: true, isSupport: true };
     } else {
       const userId = await authenticateUser(request);
       if (userId) {
-        return { authenticated: true, userId };
+        return { authenticated: true, userId, isSupport: false };
       }
       return { authenticated: false, error: "Not a support user" };
     }
   } catch (error) {
     const userId = await authenticateUser(request);
     if (userId) {
-      return { authenticated: true, userId };
+      return { authenticated: true, userId, isSupport: false };
     }
     return { authenticated: false, error: "Invalid token" };
   }
@@ -105,27 +105,42 @@ export async function GET(request: Request) {
   const userIdParam = searchParams.get("userId");
   const status = searchParams.get("status") ?? undefined;
   
-  if (!userIdParam) {
-    return NextResponse.json(
-      { error: "Missing userId" },
-      { status: 400, headers: corsHeaders }
-    );
-  }
-
   const authenticatedUserId = await authenticateUser(request);
   const auth = await authenticateSupport(request);
   
-  if (!auth.authenticated && (!authenticatedUserId || authenticatedUserId !== userIdParam)) {
-    return NextResponse.json(
-      { error: auth.error || "Unauthorized" },
-      { status: 401, headers: corsHeaders }
-    );
+  const isSupportUser = auth.authenticated && auth.isSupport === true;
+  
+  if (!auth.authenticated) {
+    if (!userIdParam) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401, headers: corsHeaders }
+      );
+    }
+    if (!authenticatedUserId || authenticatedUserId !== userIdParam) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401, headers: corsHeaders }
+      );
+    }
   }
 
   try {
-    const tickets = await getUserTickets(userIdParam, status ?? undefined);
-    return NextResponse.json({ tickets }, { headers: corsHeaders });
+    if (userIdParam) {
+      const tickets = await getUserTickets(userIdParam, status ?? undefined);
+      return NextResponse.json({ tickets }, { headers: corsHeaders });
+    } else if (isSupportUser) {
+      const { getAllTickets } = await import("@/lib/data");
+      const tickets = await getAllTickets(status ?? undefined);
+      return NextResponse.json({ tickets }, { headers: corsHeaders });
+    } else {
+      return NextResponse.json(
+        { error: "Missing userId" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
   } catch (error) {
+    console.error("Error loading tickets:", error);
     return NextResponse.json(
       { tickets: [], error: "Failed to load tickets" },
       { status: 200, headers: corsHeaders }
@@ -147,7 +162,7 @@ export async function POST(request: Request) {
     const id = randomUUID();
     await sql`
       insert into tickets (id, user_id, subject, status, priority)
-      values (${id}, ${userId}, ${subject}, ${status ?? "open"}, ${
+      values (${id}, ${userId}, ${subject}, ${status ?? "pending"}, ${
       priority ?? null
     })
     `;

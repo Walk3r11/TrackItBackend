@@ -121,16 +121,20 @@ export async function GET(
       const encoder = new TextEncoder();
       let lastMessageId: string | null = null;
       let isActive = true;
+      let lastPollTime = Date.now();
 
       controller.enqueue(
         encoder.encode(`data: ${JSON.stringify({ type: "connected" })}\n\n`)
       );
 
-      const pollInterval = setInterval(async () => {
-        if (!isActive) {
-          clearInterval(pollInterval);
+      const pollForMessages = async (immediate = false) => {
+        if (!isActive) return;
+
+        const now = Date.now();
+        if (!immediate && now - lastPollTime < 50) {
           return;
         }
+        lastPollTime = now;
 
         try {
           const query = lastMessageId
@@ -193,7 +197,11 @@ export async function GET(
             )
           );
         }
-      }, 2000);
+      };
+
+      await pollForMessages(true);
+
+      const pollInterval = setInterval(() => pollForMessages(false), 100);
 
       request.signal.addEventListener("abort", () => {
         isActive = false;
