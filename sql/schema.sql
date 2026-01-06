@@ -52,25 +52,27 @@ create table if not exists transactions (
   category text,
   created_at timestamptz default now()
 );
-alter table cards add column if not exists daily_limit numeric(14, 2);
-alter table cards add column if not exists weekly_limit numeric(14, 2);
-alter table cards add column if not exists monthly_limit numeric(14, 2);
-
-alter table transactions add column if not exists category_id uuid;
-
+alter table cards
+add column if not exists daily_limit numeric(14, 2);
+alter table cards
+add column if not exists weekly_limit numeric(14, 2);
+alter table cards
+add column if not exists monthly_limit numeric(14, 2);
+alter table transactions
+add column if not exists category_id uuid;
 insert into savings_goals (user_id)
-select id from users
-on conflict (user_id) do nothing;
-
+select id
+from users on conflict (user_id) do nothing;
 insert into categories (user_id, name)
-select id, 'Uncategorized' from users
-on conflict (user_id, name) do nothing;
+select id,
+  'Uncategorized'
+from users on conflict (user_id, name) do nothing;
 insert into categories (user_id, name)
-select distinct t.user_id, t.category
+select distinct t.user_id,
+  t.category
 from transactions t
 where t.category is not null
-  and t.category <> ''
-on conflict (user_id, name) do nothing;
+  and t.category <> '' on conflict (user_id, name) do nothing;
 update transactions t
 set category_id = c.id
 from categories c
@@ -85,21 +87,18 @@ from categories c
 where t.category_id is null
   and c.user_id = t.user_id
   and c.name = 'Uncategorized';
-
-do $$
-begin
-  alter table transactions
-    add constraint transactions_category_id_fkey
-    foreign key (category_id) references categories(id) on delete restrict;
+do $$ begin
+alter table transactions
+add constraint transactions_category_id_fkey foreign key (category_id) references categories(id) on delete restrict;
 exception
-  when duplicate_object then null;
+when duplicate_object then null;
 end $$;
-
-do $$
-begin
-  alter table transactions alter column category_id set not null;
+do $$ begin
+alter table transactions
+alter column category_id
+set not null;
 exception
-  when others then null;
+when others then null;
 end $$;
 update cards
 set monthly_limit = coalesce(monthly_limit, card_limit)
@@ -113,7 +112,6 @@ create table if not exists tickets (
   updated_at timestamptz default now(),
   created_at timestamptz default now()
 );
-
 create table if not exists email_verifications (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
@@ -122,7 +120,6 @@ create table if not exists email_verifications (
   used_at timestamptz,
   created_at timestamptz default now()
 );
-
 create table if not exists password_resets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
@@ -131,7 +128,6 @@ create table if not exists password_resets (
   used_at timestamptz,
   created_at timestamptz default now()
 );
-
 create table if not exists auth_sessions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
@@ -140,7 +136,6 @@ create table if not exists auth_sessions (
   revoked_at timestamptz,
   created_at timestamptz default now()
 );
-
 create index if not exists idx_users_last_active on users (last_active desc);
 create index if not exists idx_users_created_at on users (created_at desc);
 create index if not exists idx_cards_user on cards (user_id);
@@ -153,7 +148,11 @@ create index if not exists idx_tickets_user_updated on tickets (user_id, updated
 create index if not exists idx_email_verifications_user on email_verifications (user_id, created_at desc);
 create index if not exists idx_password_resets_user on password_resets (user_id, created_at desc);
 create index if not exists idx_auth_sessions_user on auth_sessions (user_id, created_at desc);
-
-alter table users add column if not exists email_verified boolean;
-update users set email_verified = true where email_verified is null;
-alter table users alter column email_verified set default false;
+alter table users
+add column if not exists email_verified boolean;
+update users
+set email_verified = true
+where email_verified is null;
+alter table users
+alter column email_verified
+set default false;

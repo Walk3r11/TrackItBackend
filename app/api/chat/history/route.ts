@@ -103,8 +103,37 @@ export async function GET(request: Request) {
       );
     }
 
+    const chatId = url.searchParams.get("chatId");
+
+    if (chatId) {
+      const rows = (await sql`
+        select messages, updated_at, chat_id
+        from chat_history
+        where user_id = ${userId} and chat_id = ${chatId}
+        limit 1
+      `) as Array<{
+        messages: any;
+        updated_at: Date;
+        chat_id: string;
+      }>;
+
+      if (rows.length === 0) {
+        return NextResponse.json(
+          { messages: [] },
+          { status: 200, headers: corsHeaders }
+        );
+      }
+
+      const messages = Array.isArray(rows[0].messages) ? rows[0].messages : [];
+
+      return NextResponse.json(
+        { messages, chatId: rows[0].chat_id },
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
     const rows = (await sql`
-      select messages, updated_at
+      select messages, updated_at, chat_id
       from chat_history
       where user_id = ${userId}
       order by updated_at desc
@@ -112,6 +141,7 @@ export async function GET(request: Request) {
     `) as Array<{
       messages: any;
       updated_at: Date;
+      chat_id: string;
     }>;
 
     if (rows.length === 0) {
@@ -124,7 +154,7 @@ export async function GET(request: Request) {
     const messages = Array.isArray(rows[0].messages) ? rows[0].messages : [];
 
     return NextResponse.json(
-      { messages },
+      { messages, chatId: rows[0].chat_id },
       { status: 200, headers: corsHeaders }
     );
   } catch (error) {
@@ -149,7 +179,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { messages } = body;
+    const { messages, chatId } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -158,10 +188,17 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!chatId) {
+      return NextResponse.json(
+        { error: "chatId is required" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
     await sql`
-      insert into chat_history (user_id, messages, updated_at)
-      values (${userId}, ${JSON.stringify(messages)}, now())
-      on conflict (user_id) do update
+      insert into chat_history (user_id, chat_id, messages, updated_at)
+      values (${userId}, ${chatId}, ${JSON.stringify(messages)}, now())
+      on conflict (user_id, chat_id) do update
       set messages = ${JSON.stringify(messages)},
           updated_at = now()
     `;
@@ -191,10 +228,20 @@ export async function DELETE(request: Request) {
       );
     }
 
-    await sql`
-      delete from chat_history
-      where user_id = ${userId}
-    `;
+    const url = new URL(request.url);
+    const chatId = url.searchParams.get("chatId");
+
+    if (chatId) {
+      await sql`
+        delete from chat_history
+        where user_id = ${userId} and chat_id = ${chatId}
+      `;
+    } else {
+      await sql`
+        delete from chat_history
+        where user_id = ${userId}
+      `;
+    }
 
     return NextResponse.json(
       { success: true },
