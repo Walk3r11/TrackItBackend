@@ -63,7 +63,7 @@ async function getTransactions(userId: string) {
     left join categories c on c.id = t.category_id
     where t.user_id = ${userId}
     order by created_at desc
-    limit 100
+    limit 500
   `) as TransactionRow[];
   return rows.map(mapTransaction);
 }
