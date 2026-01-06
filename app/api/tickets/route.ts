@@ -140,7 +140,6 @@ export async function GET(request: Request) {
       );
     }
   } catch (error) {
-    console.error("Error loading tickets:", error);
     return NextResponse.json(
       { tickets: [], error: "Failed to load tickets" },
       { status: 200, headers: corsHeaders }

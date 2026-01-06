@@ -95,7 +95,7 @@ export async function getUserTickets(userId: string, status?: string) {
   const rows = (await sql`
     select id, user_id, subject, status, priority, updated_at, created_at
     from tickets
-    where user_id = ${userId}
+    where user_id = ${userId}::uuid
     ${whereStatus}
     order by updated_at desc
     limit 50
