@@ -91,40 +91,53 @@ export async function lookupSupportUser(query: string) {
 }
 
 export async function getUserTickets(userId: string, status?: string) {
-  if (!userId) {
+  if (!userId || typeof userId !== "string") {
     return [];
   }
   
+  try {
+    let rows: TicketRow[];
+    if (status && status !== "all") {
+      rows = (await sql`
+        select id, user_id, subject, status, priority, updated_at, created_at
+        from tickets
+        where user_id = ${userId} and status = ${status}
+        order by updated_at desc
+        limit 50
+      `) as TicketRow[];
+    } else {
+      rows = (await sql`
+        select id, user_id, subject, status, priority, updated_at, created_at
+        from tickets
+        where user_id = ${userId}
+        order by updated_at desc
+        limit 50
+      `) as TicketRow[];
+    }
+    return rows.map(mapTicket);
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function getAllTickets(status?: string) {
   let rows: TicketRow[];
   if (status && status !== "all") {
     rows = (await sql`
       select id, user_id, subject, status, priority, updated_at, created_at
       from tickets
-      where user_id = ${userId} and status = ${status}
+      where status = ${status}
       order by updated_at desc
-      limit 50
+      limit 500
     `) as TicketRow[];
   } else {
     rows = (await sql`
       select id, user_id, subject, status, priority, updated_at, created_at
       from tickets
-      where user_id = ${userId}
       order by updated_at desc
-      limit 50
+      limit 500
     `) as TicketRow[];
   }
-  return rows.map(mapTicket);
-}
-
-export async function getAllTickets(status?: string) {
-  const whereStatus = status && status !== "all" ? sql`where status = ${status}` : sql``;
-  const rows = (await sql`
-    select id, user_id, subject, status, priority, updated_at, created_at
-    from tickets
-    ${whereStatus}
-    order by updated_at desc
-    limit 500
-  `) as TicketRow[];
   return rows.map(mapTicket);
 }
 
