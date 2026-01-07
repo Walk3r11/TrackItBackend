@@ -91,6 +91,10 @@ export async function lookupSupportUser(query: string) {
 }
 
 export async function getUserTickets(userId: string, status?: string) {
+  if (!userId) {
+    return [];
+  }
+  
   let rows: TicketRow[];
   if (status && status !== "all") {
     rows = (await sql`

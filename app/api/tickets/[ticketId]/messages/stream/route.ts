@@ -200,11 +200,24 @@ export async function GET(
 
       await pollForMessages(true);
 
+      const keepAliveInterval = setInterval(() => {
+        if (isActive) {
+          try {
+            controller.enqueue(
+              encoder.encode(`: keep-alive\n\n`)
+            );
+          } catch (e) {
+            isActive = false;
+          }
+        }
+      }, 15000);
+
       const pollInterval = setInterval(() => pollForMessages(false), 100);
 
       request.signal.addEventListener("abort", () => {
         isActive = false;
         clearInterval(pollInterval);
+        clearInterval(keepAliveInterval);
         controller.close();
       });
     },
