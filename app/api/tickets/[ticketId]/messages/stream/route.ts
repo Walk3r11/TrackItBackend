@@ -121,17 +121,29 @@ export async function GET(
       const encoder = new TextEncoder();
       let lastMessageId: string | null = null;
       let isActive = true;
-      let lastPollTime = Date.now();
+      let lastPollTime = 0;
+      const MIN_POLL_INTERVAL = 25;
 
-      controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: "connected" })}\n\n`)
-      );
+      const sendEvent = (data: any) => {
+        if (!isActive) return false;
+        try {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
+          );
+          return true;
+        } catch (e) {
+          isActive = false;
+          return false;
+        }
+      };
+
+      sendEvent({ type: "connected" });
 
       const pollForMessages = async (immediate = false) => {
         if (!isActive) return;
 
         const now = Date.now();
-        if (!immediate && now - lastPollTime < 50) {
+        if (!immediate && now - lastPollTime < MIN_POLL_INTERVAL) {
           return;
         }
         lastPollTime = now;
@@ -178,23 +190,19 @@ export async function GET(
             const newMessages = lastMessageId ? messages : messages.reverse();
 
             for (const message of newMessages) {
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({ type: "message", message })}\n\n`
-                )
-              );
+              if (!sendEvent({ type: "message", message })) {
+                return;
+              }
               lastMessageId = message.id;
             }
           }
         } catch (error) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "error",
-                error: "Polling failed",
-              })}\n\n`
-            )
-          );
+          if (!sendEvent({
+            type: "error",
+            error: error instanceof Error ? error.message : "Polling failed",
+          })) {
+            return;
+          }
         }
       };
 
@@ -203,22 +211,32 @@ export async function GET(
       const keepAliveInterval = setInterval(() => {
         if (isActive) {
           try {
-            controller.enqueue(
-              encoder.encode(`: keep-alive\n\n`)
-            );
+            controller.enqueue(encoder.encode(`: keep-alive\n\n`));
           } catch (e) {
             isActive = false;
+            clearInterval(keepAliveInterval);
+            clearInterval(pollInterval);
           }
         }
-      }, 15000);
+      }, 10000);
 
-      const pollInterval = setInterval(() => pollForMessages(false), 100);
+      const pollInterval = setInterval(() => {
+        if (isActive) {
+          pollForMessages(false);
+        } else {
+          clearInterval(pollInterval);
+          clearInterval(keepAliveInterval);
+        }
+      }, MIN_POLL_INTERVAL);
 
       request.signal.addEventListener("abort", () => {
         isActive = false;
         clearInterval(pollInterval);
         clearInterval(keepAliveInterval);
-        controller.close();
+        try {
+          controller.close();
+        } catch (e) {
+        }
       });
     },
   });
