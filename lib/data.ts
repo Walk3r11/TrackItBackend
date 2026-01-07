@@ -110,7 +110,7 @@ export async function getAllTickets(status?: string) {
     from tickets
     ${whereStatus}
     order by updated_at desc
-    limit 100
+    limit 500
   `) as TicketRow[];
   return rows.map(mapTicket);
 }

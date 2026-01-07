@@ -13,7 +13,7 @@ function getCorsHeaders(request: Request) {
   
   const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
   
-  return {
+  const headers = {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
@@ -21,10 +21,12 @@ function getCorsHeaders(request: Request) {
     "Access-Control-Expose-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
   };
+  
+  return headers;
 }
 
 export function OPTIONS(request: Request) {
-  return NextResponse.json({}, { status: 204, headers: getCorsHeaders(request) });
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(request) });
 }
 
 async function authenticateUser(request: Request): Promise<string | null> {
