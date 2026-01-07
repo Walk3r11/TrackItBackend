@@ -95,7 +95,6 @@ export async function GET(request: Request) {
     async start(controller) {
       const encoder = new TextEncoder();
       let lastTicketTimestamp: string | null = null;
-      let seenTicketIds = new Set<string>();
       let isActive = true;
 
       controller.enqueue(
@@ -143,11 +142,6 @@ export async function GET(request: Request) {
 
           if (tickets.length > 0) {
             for (const ticket of tickets) {
-              if (seenTicketIds.has(ticket.id)) {
-                continue;
-              }
-              
-              seenTicketIds.add(ticket.id);
               controller.enqueue(
                 encoder.encode(
                   `data: ${JSON.stringify({

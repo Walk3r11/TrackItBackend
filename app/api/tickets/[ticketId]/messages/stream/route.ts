@@ -119,7 +119,7 @@ export async function GET(
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder();
-      let lastMessageId: string | null = null;
+      let lastMessageTimestamp: string | null = null;
       let isActive = true;
       let lastPollTime = 0;
       const MIN_POLL_INTERVAL = 25;
@@ -149,35 +149,34 @@ export async function GET(
         lastPollTime = now;
 
         try {
-          const query = lastMessageId
-            ? sql`
-                select 
-                  id,
-                  ticket_id,
-                  user_id,
-                  sender_type,
-                  content,
-                  created_at
-                from ticket_messages
-                where ticket_id = ${ticketId}
-                  and id > ${lastMessageId}
-                order by created_at asc
-              `
-            : sql`
-                select 
-                  id,
-                  ticket_id,
-                  user_id,
-                  sender_type,
-                  content,
-                  created_at
-                from ticket_messages
-                where ticket_id = ${ticketId}
-                order by created_at desc
-                limit 1
-              `;
+          if (!lastMessageTimestamp) {
+            const latestMessage = (await sql`
+              select created_at
+              from ticket_messages
+              where ticket_id = ${ticketId}
+              order by created_at desc
+              limit 1
+            `) as Array<{ created_at: string }>;
 
-          const messages = (await query) as Array<{
+            if (latestMessage.length > 0) {
+              lastMessageTimestamp = latestMessage[0].created_at;
+            }
+            return;
+          }
+
+          const messages = (await sql`
+            select 
+              id,
+              ticket_id,
+              user_id,
+              sender_type,
+              content,
+              created_at
+            from ticket_messages
+            where ticket_id = ${ticketId}
+              and created_at > ${lastMessageTimestamp}
+            order by created_at asc
+          `) as Array<{
             id: string;
             ticket_id: string;
             user_id: string | null;
@@ -187,13 +186,13 @@ export async function GET(
           }>;
 
           if (messages.length > 0) {
-            const newMessages = lastMessageId ? messages : messages.reverse();
-
-            for (const message of newMessages) {
+            for (const message of messages) {
               if (!sendEvent({ type: "message", message })) {
                 return;
               }
-              lastMessageId = message.id;
+              if (message.created_at > lastMessageTimestamp) {
+                lastMessageTimestamp = message.created_at;
+              }
             }
           }
         } catch (error) {

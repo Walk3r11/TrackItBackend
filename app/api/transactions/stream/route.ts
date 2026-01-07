@@ -104,7 +104,6 @@ export async function GET(request: Request) {
     async start(controller) {
       const encoder = new TextEncoder();
       let lastTransactionTimestamp: string | null = null;
-      let seenTransactionIds = new Set<string>();
       let isActive = true;
 
       controller.enqueue(
@@ -161,11 +160,6 @@ export async function GET(request: Request) {
 
           if (transactions.length > 0) {
             for (const tx of transactions) {
-              if (seenTransactionIds.has(tx.id)) {
-                continue;
-              }
-
-              seenTransactionIds.add(tx.id);
               const toNumber = (value: string | number | null) =>
                 Number(value ?? 0);
               controller.enqueue(
