@@ -141,8 +141,8 @@ export async function GET(request: Request) {
     }
   } catch (error) {
     return NextResponse.json(
-      { tickets: [], error: "Failed to load tickets" },
-      { status: 200, headers: corsHeaders }
+      { tickets: [], error: error instanceof Error ? error.message : "Failed to load tickets" },
+      { status: 500, headers: corsHeaders }
     );
   }
 }
