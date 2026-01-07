@@ -251,7 +251,6 @@ export async function POST(
       { status: 201, headers: corsHeaders }
     );
   } catch (error) {
-    console.error("Error sending message:", error);
     return NextResponse.json(
       { error: "Failed to send message" },
       { status: 500, headers: corsHeaders }
