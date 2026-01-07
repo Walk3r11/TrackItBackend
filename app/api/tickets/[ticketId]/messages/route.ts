@@ -207,6 +207,20 @@ export async function POST(
       );
     }
 
+    if (ticketRows[0].status === "closed") {
+      return NextResponse.json(
+        { error: "Cannot send message. Ticket is closed. Only support can reopen it." },
+        { status: 403, headers: corsHeaders }
+      );
+    }
+    
+    if (!isSupportAccess && ticketRows[0].status !== "open") {
+      return NextResponse.json(
+        { error: `Cannot send message. Ticket is ${ticketRows[0].status}. Only open tickets allow messaging.` },
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
     const sender_type = senderType === "support" ? "support" : "user";
     const messageUserId = isSupportAccess ? null : userId;
 

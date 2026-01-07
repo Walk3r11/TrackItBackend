@@ -139,6 +139,32 @@ export async function GET(
 
       sendEvent({ type: "connected" });
 
+      let lastStatus: string | null = null;
+
+      const pollForStatus = async () => {
+        if (!isActive) return;
+
+        try {
+          const statusRows = (await sql`
+            select status
+            from tickets
+            where id = ${ticketId}
+            limit 1
+          `) as Array<{ status: string }>;
+
+          if (statusRows.length > 0) {
+            const currentStatus = statusRows[0].status;
+            if (lastStatus !== null && lastStatus !== currentStatus) {
+              if (!sendEvent({ type: "status", status: currentStatus })) {
+                return;
+              }
+            }
+            lastStatus = currentStatus;
+          }
+        } catch (error) {
+        }
+      };
+
       const pollForMessages = async (immediate = false) => {
         if (!isActive) return;
 
@@ -161,6 +187,7 @@ export async function GET(
             if (latestMessage.length > 0) {
               lastMessageTimestamp = latestMessage[0].created_at;
             }
+            await pollForStatus();
             return;
           }
 
@@ -195,6 +222,8 @@ export async function GET(
               }
             }
           }
+
+          await pollForStatus();
         } catch (error) {
           if (!sendEvent({
             type: "error",
