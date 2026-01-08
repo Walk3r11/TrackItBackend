@@ -178,8 +178,8 @@ export async function GET(
           if (!lastMessageTimestamp) {
             const latestMessage = (await sql`
               select created_at
-              from ticket_messages
-              where ticket_id = ${ticketId}
+                from ticket_messages
+                where ticket_id = ${ticketId}
               order by created_at desc
               limit 1
             `) as Array<{ created_at: string }>;
@@ -192,15 +192,15 @@ export async function GET(
           }
 
           const messages = (await sql`
-            select 
-              id,
-              ticket_id,
-              user_id,
-              sender_type,
-              content,
-              created_at
-            from ticket_messages
-            where ticket_id = ${ticketId}
+                select 
+                  id,
+                  ticket_id,
+                  user_id,
+                  sender_type,
+                  content,
+                  created_at
+                from ticket_messages
+                where ticket_id = ${ticketId}
               and created_at > ${lastMessageTimestamp}
             order by created_at asc
           `) as Array<{

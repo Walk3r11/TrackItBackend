@@ -97,13 +97,25 @@ export async function GET(request: Request) {
       let lastTicketTimestamp: string | null = null;
       let isActive = true;
 
-      controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: "connected" })}\n\n`)
-      );
+      const sendEvent = (data: any) => {
+        if (!isActive) return false;
+        try {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
+          );
+          return true;
+        } catch (e) {
+          isActive = false;
+          return false;
+        }
+      };
+
+      sendEvent({ type: "connected" });
 
       const pollInterval = setInterval(async () => {
         if (!isActive) {
           clearInterval(pollInterval);
+          clearInterval(keepAliveInterval);
           return;
         }
 
@@ -142,21 +154,19 @@ export async function GET(request: Request) {
 
           if (tickets.length > 0) {
             for (const ticket of tickets) {
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    type: "ticket",
-                    ticket: {
-                      id: ticket.id,
-                      subject: ticket.subject,
-                      status: ticket.status,
-                      priority: ticket.priority ?? undefined,
-                      updatedAt: ticket.updated_at,
-                      createdAt: ticket.created_at,
-                    },
-                  })}\n\n`
-                )
-              );
+              if (!sendEvent({
+                type: "ticket",
+                ticket: {
+                  id: ticket.id,
+                  subject: ticket.subject,
+                  status: ticket.status,
+                  priority: ticket.priority ?? undefined,
+                  updatedAt: ticket.updated_at,
+                  createdAt: ticket.created_at,
+                },
+              })) {
+                return;
+              }
               
               const ticketTimestamp = ticket.updated_at > ticket.created_at ? ticket.updated_at : ticket.created_at;
               if (ticketTimestamp > lastTicketTimestamp) {
@@ -165,21 +175,35 @@ export async function GET(request: Request) {
             }
           }
         } catch (error) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "error",
-                error: "Polling failed",
-              })}\n\n`
-            )
-          );
+          if (!sendEvent({
+            type: "error",
+            error: "Polling failed",
+          })) {
+            return;
+          }
         }
       }, 2000);
+
+      const keepAliveInterval = setInterval(() => {
+        if (isActive) {
+          try {
+            controller.enqueue(encoder.encode(`: keep-alive\n\n`));
+          } catch (e) {
+            isActive = false;
+            clearInterval(keepAliveInterval);
+            clearInterval(pollInterval);
+          }
+        }
+      }, 15000);
 
       request.signal.addEventListener("abort", () => {
         isActive = false;
         clearInterval(pollInterval);
-        controller.close();
+        clearInterval(keepAliveInterval);
+        try {
+          controller.close();
+        } catch (e) {
+        }
       });
     },
   });
