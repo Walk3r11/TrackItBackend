@@ -32,7 +32,7 @@ export async function OPTIONS(request: Request) {
   });
 }
 
-async function authenticateUser(request: Request): Promise<string | null> {
+async function authenticateUser(request: Request): Promise<{ userId: string | null; isSupport: boolean }> {
   const authHeader = request.headers.get("authorization");
   const cookieHeader = request.headers.get("cookie");
 
@@ -50,7 +50,7 @@ async function authenticateUser(request: Request): Promise<string | null> {
   }
 
   if (!token) {
-    return null;
+    return { userId: null, isSupport: false };
   }
 
   try {
@@ -60,7 +60,7 @@ async function authenticateUser(request: Request): Promise<string | null> {
     try {
       const { payload } = await jwtVerify(token, JWT_SECRET);
       if (payload.role === "support") {
-        return null;
+        return { userId: null, isSupport: true };
       }
     } catch { }
 
@@ -75,9 +75,9 @@ async function authenticateUser(request: Request): Promise<string | null> {
       limit 1
     `) as Array<{ user_id: string }>;
 
-    return rows[0]?.user_id ?? null;
+    return { userId: rows[0]?.user_id ?? null, isSupport: false };
   } catch {
-    return null;
+    return { userId: null, isSupport: false };
   }
 }
 
@@ -85,22 +85,34 @@ export async function GET(request: Request) {
   const corsHeaders = getCorsHeaders(request);
 
   try {
-    const userId = await authenticateUser(request);
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401, headers: corsHeaders }
-      );
-    }
-
+    const auth = await authenticateUser(request);
     const url = new URL(request.url);
     const queryUserId = url.searchParams.get("userId");
 
-    if (queryUserId && queryUserId !== userId) {
-      return NextResponse.json(
-        { error: "Forbidden" },
-        { status: 403, headers: corsHeaders }
-      );
+    let targetUserId: string | null = null;
+
+    if (auth.isSupport) {
+      if (!queryUserId) {
+        return NextResponse.json(
+          { error: "userId parameter required for support users" },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      targetUserId = queryUserId;
+    } else {
+      if (!auth.userId) {
+        return NextResponse.json(
+          { error: "Unauthorized" },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      if (queryUserId && queryUserId !== auth.userId) {
+        return NextResponse.json(
+          { error: "Forbidden" },
+          { status: 403, headers: corsHeaders }
+        );
+      }
+      targetUserId = auth.userId;
     }
 
     const chatId = url.searchParams.get("chatId");
@@ -109,7 +121,7 @@ export async function GET(request: Request) {
       const rows = (await sql`
         select messages, updated_at, chat_id
         from chat_history
-        where user_id = ${userId} and chat_id = ${chatId}
+        where user_id = ${targetUserId} and chat_id = ${chatId}
         limit 1
       `) as Array<{
         messages: any;
@@ -135,7 +147,7 @@ export async function GET(request: Request) {
     const rows = (await sql`
       select messages, updated_at, chat_id
       from chat_history
-      where user_id = ${userId}
+      where user_id = ${targetUserId}
       order by updated_at desc
       limit 1
     `) as Array<{
@@ -170,12 +182,28 @@ export async function POST(request: Request) {
   const corsHeaders = getCorsHeaders(request);
 
   try {
-    const userId = await authenticateUser(request);
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401, headers: corsHeaders }
-      );
+    const auth = await authenticateUser(request);
+    const url = new URL(request.url);
+    const queryUserId = url.searchParams.get("userId");
+
+    let targetUserId: string | null = null;
+
+    if (auth.isSupport) {
+      if (!queryUserId) {
+        return NextResponse.json(
+          { error: "userId parameter required for support users" },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      targetUserId = queryUserId;
+    } else {
+      if (!auth.userId) {
+        return NextResponse.json(
+          { error: "Unauthorized" },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      targetUserId = auth.userId;
     }
 
     const body = await request.json();
@@ -197,7 +225,7 @@ export async function POST(request: Request) {
 
     await sql`
       insert into chat_history (user_id, chat_id, messages, updated_at)
-      values (${userId}, ${chatId}, ${JSON.stringify(messages)}, now())
+      values (${targetUserId}, ${chatId}, ${JSON.stringify(messages)}, now())
       on conflict (user_id, chat_id) do update
       set messages = ${JSON.stringify(messages)},
           updated_at = now()
@@ -220,26 +248,41 @@ export async function DELETE(request: Request) {
   const corsHeaders = getCorsHeaders(request);
 
   try {
-    const userId = await authenticateUser(request);
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401, headers: corsHeaders }
-      );
+    const auth = await authenticateUser(request);
+    const url = new URL(request.url);
+    const queryUserId = url.searchParams.get("userId");
+
+    let targetUserId: string | null = null;
+
+    if (auth.isSupport) {
+      if (!queryUserId) {
+        return NextResponse.json(
+          { error: "userId parameter required for support users" },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      targetUserId = queryUserId;
+    } else {
+      if (!auth.userId) {
+        return NextResponse.json(
+          { error: "Unauthorized" },
+          { status: 401, headers: corsHeaders }
+        );
+      }
+      targetUserId = auth.userId;
     }
 
-    const url = new URL(request.url);
     const chatId = url.searchParams.get("chatId");
 
     if (chatId) {
       await sql`
         delete from chat_history
-        where user_id = ${userId} and chat_id = ${chatId}
+        where user_id = ${targetUserId} and chat_id = ${chatId}
       `;
     } else {
       await sql`
         delete from chat_history
-        where user_id = ${userId}
+        where user_id = ${targetUserId}
       `;
     }
 
