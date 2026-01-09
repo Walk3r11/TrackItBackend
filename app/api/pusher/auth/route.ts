@@ -151,14 +151,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const pusher = getPusher();
-    const authResponse = pusher.authorizeChannel(socket_id, channel_name);
-
-    return NextResponse.json(authResponse, { headers: corsHeaders });
+    try {
+      const pusher = getPusher();
+      const authResponse = pusher.authorizeChannel(socket_id, channel_name);
+      return NextResponse.json(authResponse, { headers: corsHeaders });
+    } catch (pusherError) {
+      console.error("[Pusher Auth] Pusher error:", pusherError);
+      const errorMessage = pusherError instanceof Error ? pusherError.message : "Pusher authorization failed";
+      return NextResponse.json(
+        { error: errorMessage },
+        { status: 500, headers: corsHeaders }
+      );
+    }
   } catch (error) {
     console.error("[Pusher Auth] Error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: errorMessage },
       { status: 500, headers: corsHeaders }
     );
   }
