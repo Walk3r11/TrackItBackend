@@ -44,6 +44,6 @@ export function publishToChannel(
     const pusher = getPusher();
     pusher.trigger(channel, event, data);
   } catch (error) {
-    console.error("[Pusher] Publish error:", error);
+    console.error("[Pusher] Publish error:", error instanceof Error ? error.message : "Unknown error");
   }
 }

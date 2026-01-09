@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
 import { randomUUID } from "crypto";
+import { publishToChannel } from "@/lib/pusher";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -259,6 +260,13 @@ export async function POST(
       content: string;
       created_at: string;
     }>;
+
+    const messageData = { type: "message", message: newMessage[0] };
+    
+    try {
+      publishToChannel(`private-ticket-${ticketId}`, "message", messageData);
+    } catch (error) {
+    }
 
     return NextResponse.json(
       { message: newMessage[0] },

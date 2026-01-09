@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
 import { jwtVerify } from "jose";
+import { publishToChannel } from "@/lib/pusher";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -159,12 +160,18 @@ export async function PATCH(
       where id = ${ticketId}
     `;
 
+    const statusData = { type: "status", status };
+    
+    try {
+      publishToChannel(`private-ticket-${ticketId}`, "status", statusData);
+    } catch (error) {
+    }
+
     return NextResponse.json(
       { success: true, status },
       { headers: corsHeaders }
     );
   } catch (error) {
-    console.error("Error updating ticket status:", error);
     return NextResponse.json(
       { error: "Failed to update ticket status" },
       { status: 500, headers: corsHeaders }
