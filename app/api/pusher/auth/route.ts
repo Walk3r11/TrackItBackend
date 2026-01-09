@@ -19,11 +19,15 @@ function getCorsHeaders(request: Request) {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
     "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Max-Age": "86400",
   };
 }
 
-export function OPTIONS(request: Request) {
-  return NextResponse.json({}, { status: 204, headers: getCorsHeaders(request) });
+export async function OPTIONS(request: Request) {
+  return new NextResponse(null, { 
+    status: 204, 
+    headers: getCorsHeaders(request) 
+  });
 }
 
 async function authenticateUser(request: Request): Promise<{ userId: string | null; isSupport: boolean }> {
