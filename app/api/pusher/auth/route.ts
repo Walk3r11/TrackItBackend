@@ -88,8 +88,9 @@ export async function POST(request: Request) {
   const corsHeaders = getCorsHeaders(request);
   
   try {
-    const body = await request.json();
-    const { socket_id, channel_name } = body;
+    const formData = await request.formData();
+    const socket_id = formData.get("socket_id") as string;
+    const channel_name = formData.get("channel_name") as string;
 
     if (!socket_id || !channel_name) {
       return NextResponse.json(
