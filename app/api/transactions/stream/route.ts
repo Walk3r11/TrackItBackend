@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { jwtVerify } from "jose";
+import { publishToChannel } from "@/lib/pusher";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -162,21 +163,27 @@ export async function GET(request: Request) {
             for (const tx of transactions) {
               const toNumber = (value: string | number | null) =>
                 Number(value ?? 0);
+              const transactionData = {
+                type: "transaction",
+                transaction: {
+                  id: tx.id,
+                  title: tx.category_name ?? "Transaction",
+                  amount: toNumber(tx.amount),
+                  date: tx.created_at,
+                  type: toNumber(tx.amount) >= 0 ? "credit" : "debit",
+                  category: tx.category_name ?? undefined,
+                },
+              };
+              
               controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    type: "transaction",
-                    transaction: {
-                      id: tx.id,
-                      title: tx.category_name ?? "Transaction",
-                      amount: toNumber(tx.amount),
-                      date: tx.created_at,
-                      type: toNumber(tx.amount) >= 0 ? "credit" : "debit",
-                      category: tx.category_name ?? undefined,
-                    },
-                  })}\n\n`
-                )
+                encoder.encode(`data: ${JSON.stringify(transactionData)}\n\n`)
               );
+
+              try {
+                publishToChannel(`private-user-${userId}`, "transaction", transactionData);
+              } catch (error) {
+                console.error("[Pusher] Error publishing transaction:", error);
+              }
 
               if (tx.created_at > lastTransactionTimestamp) {
                 lastTransactionTimestamp = tx.created_at;

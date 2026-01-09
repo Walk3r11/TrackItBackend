@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { jwtVerify } from "jose";
+import { publishToChannel } from "@/lib/pusher";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -154,7 +155,7 @@ export async function GET(request: Request) {
 
           if (tickets.length > 0) {
             for (const ticket of tickets) {
-              if (!sendEvent({
+              const ticketData = {
                 type: "ticket",
                 ticket: {
                   id: ticket.id,
@@ -164,8 +165,16 @@ export async function GET(request: Request) {
                   updatedAt: ticket.updated_at,
                   createdAt: ticket.created_at,
                 },
-              })) {
+              };
+              
+              if (!sendEvent(ticketData)) {
                 return;
+              }
+              
+              try {
+                publishToChannel(`private-user-${userId}`, "ticket", ticketData);
+              } catch (error) {
+                console.error("[Pusher] Error publishing ticket:", error);
               }
               
               const ticketTimestamp = ticket.updated_at > ticket.created_at ? ticket.updated_at : ticket.created_at;

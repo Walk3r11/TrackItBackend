@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
+import { publishToChannel } from "@/lib/pusher";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -155,8 +156,16 @@ export async function GET(
           if (statusRows.length > 0) {
             const currentStatus = statusRows[0].status;
             if (lastStatus !== null && lastStatus !== currentStatus) {
-              if (!sendEvent({ type: "status", status: currentStatus })) {
+              const statusData = { type: "status", status: currentStatus };
+              
+              if (!sendEvent(statusData)) {
                 return;
+              }
+              
+              try {
+                publishToChannel(`private-ticket-${ticketId}`, "status", statusData);
+              } catch (error) {
+                console.error("[Pusher] Error publishing status:", error);
               }
             }
             lastStatus = currentStatus;
@@ -214,9 +223,18 @@ export async function GET(
 
           if (messages.length > 0) {
             for (const message of messages) {
-              if (!sendEvent({ type: "message", message })) {
+              const messageData = { type: "message", message };
+              
+              if (!sendEvent(messageData)) {
                 return;
               }
+              
+              try {
+                publishToChannel(`private-ticket-${ticketId}`, "message", messageData);
+              } catch (error) {
+                console.error("[Pusher] Error publishing message:", error);
+              }
+              
               if (message.created_at > lastMessageTimestamp) {
                 lastMessageTimestamp = message.created_at;
               }
