@@ -154,12 +154,23 @@ export async function POST(request: Request) {
     try {
       const pusher = getPusher();
       const authResponse = pusher.authorizeChannel(socket_id, channel_name);
+      
+      if (!authResponse || typeof authResponse !== 'object') {
+        throw new Error("Invalid auth response from Pusher");
+      }
+      
       return NextResponse.json(authResponse, { headers: corsHeaders });
     } catch (pusherError) {
       console.error("[Pusher Auth] Pusher error:", pusherError);
+      console.error("[Pusher Auth] Error details:", {
+        message: pusherError instanceof Error ? pusherError.message : "Unknown",
+        stack: pusherError instanceof Error ? pusherError.stack : undefined,
+        socket_id,
+        channel_name,
+      });
       const errorMessage = pusherError instanceof Error ? pusherError.message : "Pusher authorization failed";
       return NextResponse.json(
-        { error: errorMessage },
+        { error: errorMessage, details: pusherError instanceof Error ? pusherError.stack : undefined },
         { status: 500, headers: corsHeaders }
       );
     }
