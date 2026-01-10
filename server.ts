@@ -24,6 +24,13 @@ app.prepare().then(() => {
   const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url || "", true);
+      
+      if (parsedUrl.pathname === "/api/ws/health") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "ok", websocket: "enabled", server: "custom" }));
+        return;
+      }
+      
       await handle(req, res, parsedUrl);
     } catch (err) {
       console.error("Error occurred handling", req.url, err);
@@ -43,19 +50,24 @@ app.prepare().then(() => {
 
   wss.on("connection", async (ws, req) => {
     const connectionId = randomUUID();
+    console.log(`[WebSocket] New connection: ${connectionId} from ${req.socket.remoteAddress}`);
     
     ws.on("message", async (message: Buffer) => {
       try {
         const parsed = JSON.parse(message.toString());
         
         if (parsed.type === "auth") {
+          console.log(`[WebSocket] Auth attempt for connection ${connectionId}`);
           const auth = await authenticateWebSocketConnection(parsed.token, parsed.supportUserId);
           
           if (!auth) {
+            console.log(`[WebSocket] Authentication failed for connection ${connectionId}`);
             ws.send(JSON.stringify({ type: "error", error: "Authentication failed" }));
             ws.close();
             return;
           }
+          
+          console.log(`[WebSocket] Authentication successful for connection ${connectionId}, userId: ${auth.userId}`);
 
           const userId = parsed.userId || auth.userId;
           connections.set(connectionId, { ws, auth, userId });
@@ -101,7 +113,8 @@ app.prepare().then(() => {
       }
     });
 
-    ws.on("close", () => {
+    ws.on("close", (code, reason) => {
+      console.log(`[WebSocket] Connection closed: ${connectionId}, code: ${code}, reason: ${reason?.toString()}`);
       const conn = connections.get(connectionId);
       if (conn) {
         if (conn.userId && userConnections.has(conn.userId)) {
@@ -120,7 +133,8 @@ app.prepare().then(() => {
       connections.delete(connectionId);
     });
 
-    ws.on("error", () => {
+    ws.on("error", (error) => {
+      console.error(`[WebSocket] Error on connection ${connectionId}:`, error);
       connections.delete(connectionId);
     });
   });
@@ -160,5 +174,10 @@ app.prepare().then(() => {
 
   server.listen(port, () => {
     console.log(`> Ready on http://${hostname}:${port}`);
+    console.log(`> WebSocket server listening on /api/ws`);
+  });
+  
+  wss.on("error", (error) => {
+    console.error("[WebSocket] Server error:", error);
   });
 });
