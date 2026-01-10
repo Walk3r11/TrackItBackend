@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { jwtVerify } from "jose";
-import { publishToChannel } from "@/lib/pusher";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -92,138 +91,14 @@ export async function GET(request: Request) {
     });
   }
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
-      let lastTicketTimestamp: string | null = null;
-      let isActive = true;
-
-      const sendEvent = (data: any) => {
-        if (!isActive) return false;
-        try {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
-          );
-          return true;
-        } catch (e) {
-          isActive = false;
-          return false;
-        }
-      };
-
-      sendEvent({ type: "connected" });
-
-      const pollInterval = setInterval(async () => {
-        if (!isActive) {
-          clearInterval(pollInterval);
-          clearInterval(keepAliveInterval);
-          return;
-        }
-
-        try {
-          if (!lastTicketTimestamp) {
-            const latestTicket = (await sql`
-              select updated_at, created_at
-              from tickets
-              where user_id = ${userId}
-              order by greatest(updated_at, created_at) desc
-              limit 1
-            `) as Array<{ updated_at: string; created_at: string }>;
-            
-            if (latestTicket.length > 0) {
-              const latest = latestTicket[0];
-              lastTicketTimestamp = latest.updated_at > latest.created_at ? latest.updated_at : latest.created_at;
-            }
-            return;
-          }
-
-          const tickets = (await sql`
-            select id, user_id, subject, status, priority, updated_at, created_at
-            from tickets
-            where user_id = ${userId}
-              and (updated_at > ${lastTicketTimestamp} or created_at > ${lastTicketTimestamp})
-            order by greatest(updated_at, created_at) asc
-          `) as Array<{
-            id: string;
-            user_id: string;
-            subject: string;
-            status: string;
-            priority: string | null;
-            updated_at: string;
-            created_at: string;
-          }>;
-
-          if (tickets.length > 0) {
-            for (const ticket of tickets) {
-              const ticketData = {
-                type: "ticket",
-                ticket: {
-                  id: ticket.id,
-                  subject: ticket.subject,
-                  status: ticket.status,
-                  priority: ticket.priority ?? undefined,
-                  updatedAt: ticket.updated_at,
-                  createdAt: ticket.created_at,
-                },
-              };
-              
-              if (!sendEvent(ticketData)) {
-                return;
-              }
-              
-              try {
-                publishToChannel(`private-user-${userId}`, "ticket", ticketData);
-              } catch (error) {
-                console.error("[Pusher] Error publishing ticket:", error);
-              }
-              
-              const ticketTimestamp = ticket.updated_at > ticket.created_at ? ticket.updated_at : ticket.created_at;
-              if (ticketTimestamp > lastTicketTimestamp) {
-                lastTicketTimestamp = ticketTimestamp;
-              }
-            }
-          }
-        } catch (error) {
-          if (!sendEvent({
-            type: "error",
-            error: "Polling failed",
-          })) {
-            return;
-          }
-        }
-      }, 2000);
-
-      const keepAliveInterval = setInterval(() => {
-        if (isActive) {
-          try {
-            controller.enqueue(encoder.encode(`: keep-alive\n\n`));
-          } catch (e) {
-            isActive = false;
-            clearInterval(keepAliveInterval);
-            clearInterval(pollInterval);
-          }
-        }
-      }, 15000);
-
-      request.signal.addEventListener("abort", () => {
-        isActive = false;
-        clearInterval(pollInterval);
-        clearInterval(keepAliveInterval);
-        try {
-          controller.close();
-        } catch (e) {
-        }
-      });
+  return NextResponse.json(
+    { 
+      message: "This endpoint is deprecated. Please use WebSocket at /api/ws instead.",
+      websocket: "/api/ws"
     },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      ...getCorsHeaders(request),
-    },
-  });
+    { 
+      status: 410,
+      headers: corsHeaders 
+    }
+  );
 }
-

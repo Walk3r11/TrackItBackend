@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
-import { publishToChannel } from "@/lib/pusher";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -117,182 +116,14 @@ export async function GET(
     }
   }
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder();
-      let lastMessageTimestamp: string | null = null;
-      let isActive = true;
-      let lastPollTime = 0;
-      const MIN_POLL_INTERVAL = 25;
-
-      const sendEvent = (data: any) => {
-        if (!isActive) return false;
-        try {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
-          );
-          return true;
-        } catch (e) {
-          isActive = false;
-          return false;
-        }
-      };
-
-      sendEvent({ type: "connected" });
-
-      let lastStatus: string | null = null;
-
-      const pollForStatus = async () => {
-        if (!isActive) return;
-
-        try {
-          const statusRows = (await sql`
-            select status
-            from tickets
-            where id = ${ticketId}
-            limit 1
-          `) as Array<{ status: string }>;
-
-          if (statusRows.length > 0) {
-            const currentStatus = statusRows[0].status;
-            if (lastStatus !== null && lastStatus !== currentStatus) {
-              const statusData = { type: "status", status: currentStatus };
-              
-              if (!sendEvent(statusData)) {
-                return;
-              }
-              
-              try {
-                publishToChannel(`private-ticket-${ticketId}`, "status", statusData);
-              } catch (error) {
-                console.error("[Pusher] Error publishing status:", error);
-              }
-            }
-            lastStatus = currentStatus;
-          }
-        } catch (error) {
-        }
-      };
-
-      const pollForMessages = async (immediate = false) => {
-        if (!isActive) return;
-
-        const now = Date.now();
-        if (!immediate && now - lastPollTime < MIN_POLL_INTERVAL) {
-          return;
-        }
-        lastPollTime = now;
-
-        try {
-          if (!lastMessageTimestamp) {
-            const latestMessage = (await sql`
-              select created_at
-                from ticket_messages
-                where ticket_id = ${ticketId}
-              order by created_at desc
-              limit 1
-            `) as Array<{ created_at: string }>;
-
-            if (latestMessage.length > 0) {
-              lastMessageTimestamp = latestMessage[0].created_at;
-            }
-            await pollForStatus();
-            return;
-          }
-
-          const messages = (await sql`
-                select 
-                  id,
-                  ticket_id,
-                  user_id,
-                  sender_type,
-                  content,
-                  created_at
-                from ticket_messages
-                where ticket_id = ${ticketId}
-              and created_at > ${lastMessageTimestamp}
-            order by created_at asc
-          `) as Array<{
-            id: string;
-            ticket_id: string;
-            user_id: string | null;
-            sender_type: "user" | "support";
-            content: string;
-            created_at: string;
-          }>;
-
-          if (messages.length > 0) {
-            for (const message of messages) {
-              const messageData = { type: "message", message };
-              
-              if (!sendEvent(messageData)) {
-                return;
-              }
-              
-              try {
-                publishToChannel(`private-ticket-${ticketId}`, "message", messageData);
-              } catch (error) {
-                console.error("[Pusher] Error publishing message:", error);
-              }
-              
-              if (message.created_at > lastMessageTimestamp) {
-                lastMessageTimestamp = message.created_at;
-              }
-            }
-          }
-
-          await pollForStatus();
-        } catch (error) {
-          if (!sendEvent({
-            type: "error",
-            error: error instanceof Error ? error.message : "Polling failed",
-          })) {
-            return;
-          }
-        }
-      };
-
-      await pollForMessages(true);
-
-      const keepAliveInterval = setInterval(() => {
-        if (isActive) {
-          try {
-            controller.enqueue(encoder.encode(`: keep-alive\n\n`));
-          } catch (e) {
-            isActive = false;
-            clearInterval(keepAliveInterval);
-            clearInterval(pollInterval);
-          }
-        }
-      }, 10000);
-
-      const pollInterval = setInterval(() => {
-        if (isActive) {
-          pollForMessages(false);
-        } else {
-          clearInterval(pollInterval);
-          clearInterval(keepAliveInterval);
-        }
-      }, MIN_POLL_INTERVAL);
-
-      request.signal.addEventListener("abort", () => {
-        isActive = false;
-        clearInterval(pollInterval);
-        clearInterval(keepAliveInterval);
-        try {
-          controller.close();
-        } catch (e) {
-        }
-      });
+  return NextResponse.json(
+    { 
+      message: "This endpoint is deprecated. Please use WebSocket at /api/ws instead.",
+      websocket: "/api/ws"
     },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      ...getCorsHeaders(request),
-    },
-  });
+    { 
+      status: 410,
+      headers: corsHeaders 
+    }
+  );
 }

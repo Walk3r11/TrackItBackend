@@ -363,7 +363,7 @@ export class WebSocketHandler {
     }, 2000);
   }
 
-  private send(message: string) {
+  send(message: string) {
     if (this.isActive && this.client.readyState === CONNECTED) {
       try {
         this.client.send(message);
@@ -373,8 +373,12 @@ export class WebSocketHandler {
     }
   }
 
+  private sendPrivate(message: string) {
+    this.send(message);
+  }
+
   private sendError(error: string) {
-    this.send(createWebSocketMessage("error", undefined, error));
+    this.sendPrivate(createWebSocketMessage("error", undefined, error));
   }
 
   cleanup() {

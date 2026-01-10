@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
 import { randomUUID } from "crypto";
-import { publishToChannel } from "@/lib/pusher";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -264,7 +263,9 @@ export async function POST(
     const messageData = { type: "message", message: newMessage[0] };
     
     try {
-      publishToChannel(`private-ticket-${ticketId}`, "message", messageData);
+      if ((global as any).wsBroadcast) {
+        (global as any).wsBroadcast.toTicket(ticketId, messageData);
+      }
     } catch (error) {
     }
 

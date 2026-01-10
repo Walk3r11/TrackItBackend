@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
 import { jwtVerify } from "jose";
-import { publishToChannel } from "@/lib/pusher";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -163,7 +162,9 @@ export async function PATCH(
     const statusData = { type: "status", status };
     
     try {
-      publishToChannel(`private-ticket-${ticketId}`, "status", statusData);
+      if ((global as any).wsBroadcast) {
+        (global as any).wsBroadcast.toTicket(ticketId, statusData);
+      }
     } catch (error) {
     }
 
