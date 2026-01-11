@@ -31,6 +31,12 @@ app.prepare().then(() => {
         return;
       }
       
+      const isUpgrade = req.headers.upgrade === "websocket";
+      if (isUpgrade && parsedUrl.pathname === "/api/ws") {
+        console.log("[HTTP] WebSocket upgrade request detected, letting WebSocketServer handle it");
+        return;
+      }
+      
       await handle(req, res, parsedUrl);
     } catch (err) {
       console.error("Error occurred handling", req.url, err);
@@ -41,7 +47,11 @@ app.prepare().then(() => {
 
   const wss = new WebSocketServer({ 
     server,
-    path: "/api/ws"
+    path: "/api/ws",
+    verifyClient: (info: { origin: string; secure: boolean; req: any }) => {
+      console.log(`[WebSocket] Verify client: ${info.origin} -> ${info.req.url}`);
+      return true;
+    }
   });
 
   const connections = new Map<string, Connection>();
@@ -51,8 +61,11 @@ app.prepare().then(() => {
   wss.on("connection", async (ws, req) => {
     const connectionId = randomUUID();
     console.log(`[WebSocket] New connection: ${connectionId} from ${req.socket.remoteAddress}`);
+    console.log(`[WebSocket] Connection URL: ${req.url}`);
+    console.log(`[WebSocket] Connection headers:`, req.headers);
     
     ws.on("message", async (message: Buffer) => {
+      console.log(`[WebSocket] Received message on connection ${connectionId}:`, message.toString().substring(0, 100));
       try {
         const parsed = JSON.parse(message.toString());
         
@@ -109,6 +122,7 @@ app.prepare().then(() => {
         } else if (parsed.type === "pong") {
         }
       } catch (error) {
+        console.error(`[WebSocket] Error processing message on connection ${connectionId}:`, error);
         ws.send(JSON.stringify({ type: "error", error: "Invalid message" }));
       }
     });
@@ -175,9 +189,14 @@ app.prepare().then(() => {
   server.listen(port, () => {
     console.log(`> Ready on http://${hostname}:${port}`);
     console.log(`> WebSocket server listening on /api/ws`);
+    console.log(`> Custom server.ts is running (NOT next start)`);
   });
   
   wss.on("error", (error) => {
     console.error("[WebSocket] Server error:", error);
+  });
+  
+  wss.on("listening", () => {
+    console.log("[WebSocket] WebSocketServer is listening");
   });
 });
