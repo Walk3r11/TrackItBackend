@@ -31,12 +31,6 @@ app.prepare().then(() => {
         return;
       }
       
-      const isUpgrade = req.headers.upgrade === "websocket";
-      if (isUpgrade && parsedUrl.pathname === "/api/ws") {
-        console.log("[HTTP] WebSocket upgrade request detected, letting WebSocketServer handle it");
-        return;
-      }
-      
       await handle(req, res, parsedUrl);
     } catch (err) {
       console.error("Error occurred handling", req.url, err);
@@ -46,11 +40,22 @@ app.prepare().then(() => {
   });
 
   const wss = new WebSocketServer({ 
-    server,
-    path: "/api/ws",
-    verifyClient: (info: { origin: string; secure: boolean; req: any }) => {
-      console.log(`[WebSocket] Verify client: ${info.origin} -> ${info.req.url}`);
-      return true;
+    noServer: true,
+    perMessageDeflate: false
+  });
+
+  server.on("upgrade", (request, socket, head) => {
+    const parsedUrl = parse(request.url || "", true);
+    console.log(`[HTTP] Upgrade request: ${parsedUrl.pathname} from ${request.headers.origin || 'unknown'}`);
+    
+    if (parsedUrl.pathname === "/api/ws") {
+      console.log("[HTTP] Handling WebSocket upgrade");
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    } else {
+      console.log(`[HTTP] Rejecting upgrade for path: ${parsedUrl.pathname}`);
+      socket.destroy();
     }
   });
 
