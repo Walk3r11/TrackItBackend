@@ -48,9 +48,14 @@ app.prepare().then(() => {
     const parsedUrl = parse(request.url || "", true);
     
     if (parsedUrl.pathname === "/api/ws") {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
-      });
+      try {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          wss.emit("connection", ws, request);
+        });
+      } catch (error) {
+        console.error("[HTTP] Upgrade error:", error);
+        socket.destroy();
+      }
     } else {
       socket.destroy();
     }
@@ -100,11 +105,15 @@ app.prepare().then(() => {
       }
       isAlive = false;
       try {
-        ws.ping();
+        if (ws.readyState === 1) {
+          ws.ping();
+        } else {
+          cleanup();
+        }
       } catch (e) {
         cleanup();
       }
-    }, 30000);
+    }, 20000);
     
     ws.on("message", async (message: Buffer) => {
       try {
