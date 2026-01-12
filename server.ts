@@ -21,13 +21,35 @@ interface Connection {
 }
 
 app.prepare().then(() => {
+  const wss = new WebSocketServer({ 
+    noServer: true,
+    perMessageDeflate: false,
+    clientTracking: true
+  });
+
   const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url || "", true);
       
       if (parsedUrl.pathname === "/api/ws/health") {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ status: "ok", websocket: "enabled", server: "custom" }));
+        res.end(JSON.stringify({ status: "ok", websocket: "enabled", server: "custom", connections: wss.clients.size }));
+        return;
+      }
+      
+      if (parsedUrl.pathname === "/api/ws" && req.headers.upgrade !== "websocket") {
+        res.writeHead(426, { 
+          "Content-Type": "application/json",
+          "Upgrade": "websocket"
+        });
+        res.end(JSON.stringify({ 
+          error: "WebSocket upgrade required",
+          message: "This endpoint requires a WebSocket upgrade request"
+        }));
+        return;
+      }
+      
+      if (req.headers.upgrade === "websocket") {
         return;
       }
       
@@ -39,18 +61,23 @@ app.prepare().then(() => {
     }
   });
 
-  const wss = new WebSocketServer({ 
-    noServer: true,
-    perMessageDeflate: false
-  });
-
   server.on("upgrade", (request, socket, head) => {
     const parsedUrl = parse(request.url || "", true);
     
     if (parsedUrl.pathname === "/api/ws") {
+      socket.on("error", (err) => {
+        console.error("[HTTP] Socket error during upgrade:", err);
+      });
+      
+      socket.on("close", () => {
+        console.error("[HTTP] Socket closed during upgrade");
+      });
+      
       try {
-        wss.handleUpgrade(request, socket, head, (ws) => {
-          wss.emit("connection", ws, request);
+        wss.handleUpgrade(request, socket, head, (ws, req) => {
+          socket.removeAllListeners("error");
+          socket.removeAllListeners("close");
+          wss.emit("connection", ws, req);
         });
       } catch (error) {
         console.error("[HTTP] Upgrade error:", error);
