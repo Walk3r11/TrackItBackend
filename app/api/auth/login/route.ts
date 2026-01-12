@@ -10,6 +10,25 @@ type Payload = {
   password?: string;
 };
 
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = [
+    "https://www.trackitco.com",
+    "https://trackitco.com",
+    "http://localhost:3000",
+  ];
+
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Expose-Headers": "Content-Type",
+  };
+}
+
 const minPasswordLength = 8;
 const passwordPolicy = {
   upper: /[A-Z]/,
@@ -18,7 +37,12 @@ const passwordPolicy = {
   special: /[^A-Za-z0-9]/
 };
 
+export async function OPTIONS(request: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(request) });
+}
+
 export async function POST(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   const body = (await request.json()) as Payload;
   const authHeader = request.headers.get("authorization");
   const secret = process.env.JWT_SECRET || "trackit-secret";
@@ -35,14 +59,14 @@ export async function POST(request: Request) {
       if (typeof payload.email === "string") email = payload.email.toLowerCase();
       if (typeof payload.password === "string") password = payload.password;
     } catch {
-      return NextResponse.json({ error: "Invalid auth token" }, { status: 401 });
+      return NextResponse.json({ error: "Invalid auth token" }, { status: 401, headers: corsHeaders });
     }
   } else {
-    return NextResponse.json({ error: "Missing auth token" }, { status: 401 });
+    return NextResponse.json({ error: "Missing auth token" }, { status: 401, headers: corsHeaders });
   }
 
   if (!email || !password) {
-    return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
+    return NextResponse.json({ error: "Missing credentials" }, { status: 400, headers: corsHeaders });
   }
   if (
     password.length < minPasswordLength ||
@@ -53,20 +77,20 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json(
       { error: "Password must be 8+ chars with upper, lower, number, and special. Reset your password." },
-      { status: 400 }
+      { status: 400, headers: corsHeaders }
     );
   }
 
   const authRow = await getAppUserAuth(email);
   if (!authRow) {
-    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    return NextResponse.json({ error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
   }
   if (authRow.email_verified === false) {
-    return NextResponse.json({ error: "Email not verified" }, { status: 403 });
+    return NextResponse.json({ error: "Email not verified" }, { status: 403, headers: corsHeaders });
   }
 
   if (!currentPepper) {
-    return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
+    return NextResponse.json({ error: "Server misconfigured" }, { status: 500, headers: corsHeaders });
   }
 
   const peppers: Array<{ value: string; version: "current" | "previous" }> = [
@@ -85,7 +109,7 @@ export async function POST(request: Request) {
     }
   }
   if (!verified) {
-    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    return NextResponse.json({ error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
   }
 
   if (usedVersion === "previous") {
@@ -100,5 +124,13 @@ export async function POST(request: Request) {
     insert into auth_sessions (user_id, token_hash, expires_at)
     values (${authRow.id}, ${tokenHash}, now() + interval '60 days')
   `;
-  return NextResponse.json({ token: sessionToken, user }, { status: 200 });
+  const response = NextResponse.json({ token: sessionToken, user }, { status: 200, headers: corsHeaders });
+  response.cookies.set("auth-token", sessionToken, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    maxAge: 60 * 60 * 24 * 60,
+    path: "/"
+  });
+  return response;
 }

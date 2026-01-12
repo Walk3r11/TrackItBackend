@@ -2,15 +2,44 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
 
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = [
+    "https://www.trackitco.com",
+    "https://trackitco.com",
+    "http://localhost:3000",
+  ];
+
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Expose-Headers": "Content-Type",
+  };
+}
+
+export async function OPTIONS(request: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(request) });
+}
+
 export async function POST(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   const authHeader = request.headers.get("authorization");
-  if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
-    return NextResponse.json({ error: "Missing auth token" }, { status: 401 });
+  const cookieHeader = request.headers.get("cookie");
+  let token: string | null = null;
+
+  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    token = authHeader.slice(7).trim();
+  } else if (cookieHeader) {
+    const cookieMatch = cookieHeader.match(/auth-token=([^;]+)/);
+    if (cookieMatch) token = cookieMatch[1];
   }
 
-  const token = authHeader.slice(7).trim();
   if (!token) {
-    return NextResponse.json({ error: "Missing auth token" }, { status: 401 });
+    return NextResponse.json({ error: "Missing auth token" }, { status: 401, headers: corsHeaders });
   }
 
   try {
@@ -45,7 +74,7 @@ export async function POST(request: Request) {
 
     const row = rows[0];
     if (!row) {
-      return NextResponse.json({ error: "Invalid session" }, { status: 401 });
+      return NextResponse.json({ error: "Invalid session" }, { status: 401, headers: corsHeaders });
     }
 
     const toNumber = (value: string | number | null) => Number(value ?? 0);
@@ -60,8 +89,8 @@ export async function POST(request: Request) {
       createdAt: row.created_at
     };
 
-    return NextResponse.json({ ok: true, user }, { status: 200 });
+    return NextResponse.json({ ok: true, user }, { status: 200, headers: corsHeaders });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to validate session" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to validate session" }, { status: 500, headers: corsHeaders });
   }
 }

@@ -28,11 +28,16 @@ export function OPTIONS(request: Request) {
 
 async function authenticateUser(request: Request): Promise<string | null> {
   const authHeader = request.headers.get("authorization");
-  if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
-    return null;
+  const cookieHeader = request.headers.get("cookie");
+  let token: string | null = null;
+
+  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    token = authHeader.slice(7).trim();
+  } else if (cookieHeader) {
+    const cookieMatch = cookieHeader.match(/auth-token=([^;]+)/);
+    if (cookieMatch) token = cookieMatch[1];
   }
 
-  const token = authHeader.slice(7).trim();
   if (!token) {
     return null;
   }
@@ -179,4 +184,3 @@ export async function PATCH(
     );
   }
 }
-
