@@ -46,15 +46,12 @@ app.prepare().then(() => {
 
   server.on("upgrade", (request, socket, head) => {
     const parsedUrl = parse(request.url || "", true);
-    console.log(`[HTTP] Upgrade request: ${parsedUrl.pathname} from ${request.headers.origin || 'unknown'}`);
     
     if (parsedUrl.pathname === "/api/ws") {
-      console.log("[HTTP] Handling WebSocket upgrade");
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit("connection", ws, request);
       });
     } else {
-      console.log(`[HTTP] Rejecting upgrade for path: ${parsedUrl.pathname}`);
       socket.destroy();
     }
   });
@@ -65,27 +62,62 @@ app.prepare().then(() => {
 
   wss.on("connection", async (ws, req) => {
     const connectionId = randomUUID();
-    console.log(`[WebSocket] New connection: ${connectionId} from ${req.socket.remoteAddress}`);
-    console.log(`[WebSocket] Connection URL: ${req.url}`);
-    console.log(`[WebSocket] Connection headers:`, req.headers);
+    let isAlive = true;
+    let pingInterval: NodeJS.Timeout | null = null;
+    
+    const cleanup = () => {
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+      }
+      const conn = connections.get(connectionId);
+      if (conn) {
+        if (conn.userId && userConnections.has(conn.userId)) {
+          userConnections.get(conn.userId)!.delete(connectionId);
+          if (userConnections.get(conn.userId)!.size === 0) {
+            userConnections.delete(conn.userId);
+          }
+        }
+        if (conn.ticketId && ticketConnections.has(conn.ticketId)) {
+          ticketConnections.get(conn.ticketId)!.delete(connectionId);
+          if (ticketConnections.get(conn.ticketId)!.size === 0) {
+            ticketConnections.delete(conn.ticketId);
+          }
+        }
+      }
+      connections.delete(connectionId);
+    };
+    
+    ws.on("pong", () => {
+      isAlive = true;
+    });
+    
+    pingInterval = setInterval(() => {
+      if (!isAlive) {
+        ws.terminate();
+        cleanup();
+        return;
+      }
+      isAlive = false;
+      try {
+        ws.ping();
+      } catch (e) {
+        cleanup();
+      }
+    }, 30000);
     
     ws.on("message", async (message: Buffer) => {
-      console.log(`[WebSocket] Received message on connection ${connectionId}:`, message.toString().substring(0, 100));
       try {
         const parsed = JSON.parse(message.toString());
         
         if (parsed.type === "auth") {
-          console.log(`[WebSocket] Auth attempt for connection ${connectionId}`);
           const auth = await authenticateWebSocketConnection(parsed.token, parsed.supportUserId);
           
           if (!auth) {
-            console.log(`[WebSocket] Authentication failed for connection ${connectionId}`);
             ws.send(JSON.stringify({ type: "error", error: "Authentication failed" }));
             ws.close();
             return;
           }
-          
-          console.log(`[WebSocket] Authentication successful for connection ${connectionId}, userId: ${auth.userId}`);
 
           const userId = parsed.userId || auth.userId;
           connections.set(connectionId, { ws, auth, userId });
@@ -125,36 +157,23 @@ app.prepare().then(() => {
           conn.streamType = parsed.streamType;
           ws.send(JSON.stringify({ type: "subscribed", data: { type: parsed.streamType } }));
         } else if (parsed.type === "pong") {
+          isAlive = true;
         }
       } catch (error) {
-        console.error(`[WebSocket] Error processing message on connection ${connectionId}:`, error);
-        ws.send(JSON.stringify({ type: "error", error: "Invalid message" }));
+        try {
+          ws.send(JSON.stringify({ type: "error", error: "Invalid message" }));
+        } catch (e) {
+          cleanup();
+        }
       }
     });
 
-    ws.on("close", (code, reason) => {
-      console.log(`[WebSocket] Connection closed: ${connectionId}, code: ${code}, reason: ${reason?.toString()}`);
-      const conn = connections.get(connectionId);
-      if (conn) {
-        if (conn.userId && userConnections.has(conn.userId)) {
-          userConnections.get(conn.userId)!.delete(connectionId);
-          if (userConnections.get(conn.userId)!.size === 0) {
-            userConnections.delete(conn.userId);
-          }
-        }
-        if (conn.ticketId && ticketConnections.has(conn.ticketId)) {
-          ticketConnections.get(conn.ticketId)!.delete(connectionId);
-          if (ticketConnections.get(conn.ticketId)!.size === 0) {
-            ticketConnections.delete(conn.ticketId);
-          }
-        }
-      }
-      connections.delete(connectionId);
+    ws.on("close", () => {
+      cleanup();
     });
 
-    ws.on("error", (error) => {
-      console.error(`[WebSocket] Error on connection ${connectionId}:`, error);
-      connections.delete(connectionId);
+    ws.on("error", () => {
+      cleanup();
     });
   });
 
@@ -194,14 +213,9 @@ app.prepare().then(() => {
   server.listen(port, () => {
     console.log(`> Ready on http://${hostname}:${port}`);
     console.log(`> WebSocket server listening on /api/ws`);
-    console.log(`> Custom server.ts is running (NOT next start)`);
   });
   
   wss.on("error", (error) => {
     console.error("[WebSocket] Server error:", error);
-  });
-  
-  wss.on("listening", () => {
-    console.log("[WebSocket] WebSocketServer is listening");
   });
 });
