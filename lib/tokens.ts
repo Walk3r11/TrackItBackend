@@ -10,10 +10,10 @@ export function getAppBaseUrl() {
 
 export function getTokenSecret() {
   const secret = process.env.TOKEN_SECRET;
-  if (!secret) {
-    throw new Error("TOKEN_SECRET is not set");
-  }
-  return secret;
+  if (secret) return secret;
+  const fallback = process.env.JWT_SECRET;
+  if (fallback) return fallback;
+  throw new Error("TOKEN_SECRET is not set");
 }
 
 export function hashToken(value: string) {
