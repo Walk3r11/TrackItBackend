@@ -24,14 +24,27 @@ function isUuid(value: unknown): value is string {
   );
 }
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = [
+    "https://www.trackitco.com",
+    "https://trackitco.com",
+    "http://localhost:3000",
+  ];
 
-export function OPTIONS() {
-  return NextResponse.json({}, { status: 204, headers: corsHeaders });
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Expose-Headers": "Content-Type",
+  };
+}
+
+export function OPTIONS(request: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(request) });
 }
 
 const toNumber = (value: Numeric) => Number(value ?? 0);
@@ -125,6 +138,7 @@ function parseLimits(body: any) {
 }
 
 export async function GET(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
   if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
@@ -137,6 +151,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   const body = await request.json();
   const { userId, nickname, balance, tags } = body;
   if (!userId || !nickname) {
@@ -168,6 +183,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   const body = await request.json();
   const { id, userId, balance, tags, nickname } = body;
   if (!id || !userId) {
@@ -196,6 +212,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   const userId = searchParams.get("userId");

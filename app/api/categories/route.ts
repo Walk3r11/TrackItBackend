@@ -4,17 +4,31 @@ import { clearUserCategories, ensureUncategorizedCategory, getOrCreateCategoryBy
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const allowedOrigins = [
+    "https://www.trackitco.com",
+    "https://trackitco.com",
+    "http://localhost:3000",
+  ];
 
-export function OPTIONS() {
-  return NextResponse.json({}, { status: 204, headers: corsHeaders });
+  const allowOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Expose-Headers": "Content-Type",
+  };
+}
+
+export function OPTIONS(request: Request) {
+  return new NextResponse(null, { status: 204, headers: getCorsHeaders(request) });
 }
 
 export async function GET(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
   if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
@@ -29,6 +43,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   const body = (await request.json().catch(() => ({}))) as { userId?: string; name?: string; color?: string | null };
   const userId = body.userId;
   if (!userId || !body.name) {
@@ -45,6 +60,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const corsHeaders = getCorsHeaders(request);
   const url = new URL(request.url);
   const userIdFromQuery = url.searchParams.get("userId");
   const body = (await request.json().catch(() => ({}))) as { userId?: string };
@@ -59,4 +75,3 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Failed to clear categories" }, { status: 500, headers: corsHeaders });
   }
 }
-
