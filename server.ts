@@ -12,6 +12,15 @@ const port = parseInt(process.env.PORT || "8080", 10);
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
+const allowedOrigins = [
+  "https://www.trackitco.com",
+  "https://trackitco.com",
+  "http://localhost:3000",
+];
+
+function getCorsOrigin(origin: string | undefined) {
+  return origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+}
 
 interface Connection {
   ws: any;
@@ -33,6 +42,19 @@ app.prepare().then(() => {
   const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url || "", true);
+
+      if (req.method === "OPTIONS") {
+        const origin = getCorsOrigin(req.headers.origin);
+        res.writeHead(204, {
+          "Access-Control-Allow-Origin": origin,
+          "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
+          "Access-Control-Allow-Credentials": "true",
+          "Access-Control-Expose-Headers": "Content-Type",
+        });
+        res.end();
+        return;
+      }
       
       if (parsedUrl.pathname === "/api/ws/health") {
         res.writeHead(200, { "Content-Type": "application/json" });
