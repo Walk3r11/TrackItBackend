@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { getCache, setCache } from "./cache";
 
 type Numeric = string | number | null;
 
@@ -81,13 +82,20 @@ export async function lookupUser(query: string) {
 
 export async function lookupSupportUser(query: string) {
   const cleaned = query.trim().toLowerCase();
+  const cacheKey = `support-user:${cleaned}`;
+  const cached = await getCache<{ user: ReturnType<typeof mapUser>; source: "users" }>(cacheKey);
+  if (cached) return cached;
+
   const rows = (await sql`
     select id, name, first_name, last_name, email, balance, monthly_spend, last_active, created_at
     from users
     where lower(email) = ${cleaned} or id::text = ${query}
     limit 1
   `) as UserRow[];
-  return rows[0] ? { user: mapUser(rows[0]), source: "users" as const } : null;
+  if (!rows[0]) return null;
+  const result = { user: mapUser(rows[0]), source: "users" as const };
+  await setCache(cacheKey, result, 60_000);
+  return result;
 }
 
 export async function getUserTickets(userId: string, status?: string) {
@@ -96,6 +104,10 @@ export async function getUserTickets(userId: string, status?: string) {
   }
   
   try {
+    const cacheKey = `user-tickets:${userId}:${status ?? "all"}`;
+    const cached = await getCache<ReturnType<typeof mapTicket>[]>(cacheKey);
+    if (cached) return cached;
+
     let rows: TicketRow[];
     if (status && status !== "all") {
       rows = (await sql`
@@ -114,13 +126,19 @@ export async function getUserTickets(userId: string, status?: string) {
         limit 50
       `) as TicketRow[];
     }
-    return rows.map(mapTicket);
+    const tickets = rows.map(mapTicket);
+    await setCache(cacheKey, tickets, 15_000);
+    return tickets;
   } catch (error) {
     throw error;
   }
 }
 
 export async function getAllTickets(status?: string) {
+  const cacheKey = `all-tickets:${status ?? "all"}`;
+  const cached = await getCache<ReturnType<typeof mapTicket>[]>(cacheKey);
+  if (cached) return cached;
+
   let rows: TicketRow[];
   if (status && status !== "all") {
     rows = (await sql`
@@ -138,7 +156,9 @@ export async function getAllTickets(status?: string) {
       limit 500
     `) as TicketRow[];
   }
-  return rows.map(mapTicket);
+  const tickets = rows.map(mapTicket);
+  await setCache(cacheKey, tickets, 15_000);
+  return tickets;
 }
 
 export async function getUserSeries(userId: string) {

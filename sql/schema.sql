@@ -138,13 +138,17 @@ create table if not exists auth_sessions (
 );
 create index if not exists idx_users_last_active on users (last_active desc);
 create index if not exists idx_users_created_at on users (created_at desc);
+create index if not exists idx_users_email_lower on users (lower(email));
 create index if not exists idx_cards_user on cards (user_id);
+create index if not exists idx_cards_user_created on cards (user_id, created_at desc);
 create index if not exists idx_categories_user on categories (user_id);
 create index if not exists idx_categories_user_name on categories (user_id, name);
 create index if not exists idx_transactions_user_created on transactions (user_id, created_at desc);
 create index if not exists idx_transactions_card_created on transactions (card_id, created_at desc);
 create index if not exists idx_transactions_category_created on transactions (category_id, created_at desc);
 create index if not exists idx_tickets_user_updated on tickets (user_id, updated_at desc);
+create index if not exists idx_tickets_user_status_updated on tickets (user_id, status, updated_at desc);
+create index if not exists idx_tickets_status_updated on tickets (status, updated_at desc);
 create index if not exists idx_email_verifications_user on email_verifications (user_id, created_at desc);
 create index if not exists idx_password_resets_user on password_resets (user_id, created_at desc);
 create index if not exists idx_auth_sessions_user on auth_sessions (user_id, created_at desc);
