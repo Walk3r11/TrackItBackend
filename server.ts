@@ -4,6 +4,7 @@ import next from "next";
 import { WebSocketServer } from "ws";
 import { randomUUID } from "crypto";
 import { authenticateWebSocketConnection } from "./lib/websocket";
+import { sql } from "./lib/db";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "0.0.0.0";
@@ -18,6 +19,8 @@ interface Connection {
   userId?: string;
   ticketId?: string;
   streamType?: "tickets" | "ticket-messages" | "transactions";
+  pollInterval?: NodeJS.Timeout | null;
+  lastMessageTimestamp?: string | null;
 }
 
 app.prepare().then(() => {
@@ -103,6 +106,10 @@ app.prepare().then(() => {
         pingInterval = null;
       }
       const conn = connections.get(connectionId);
+      if (conn?.pollInterval) {
+        clearInterval(conn.pollInterval);
+        conn.pollInterval = null;
+      }
       if (conn) {
         if (conn.userId && userConnections.has(conn.userId)) {
           userConnections.get(conn.userId)!.delete(connectionId);
@@ -173,13 +180,67 @@ app.prepare().then(() => {
             return;
           }
 
-          if (parsed.streamType === "ticket-messages" && parsed.ticketId) {
-            if (!ticketConnections.has(parsed.ticketId)) {
-              ticketConnections.set(parsed.ticketId, new Set());
-            }
-            ticketConnections.get(parsed.ticketId)!.add(connectionId);
-            conn.ticketId = parsed.ticketId;
+        if (parsed.streamType === "ticket-messages" && parsed.ticketId) {
+          if (!ticketConnections.has(parsed.ticketId)) {
+            ticketConnections.set(parsed.ticketId, new Set());
           }
+          ticketConnections.get(parsed.ticketId)!.add(connectionId);
+          conn.ticketId = parsed.ticketId;
+          if (conn.pollInterval) {
+            clearInterval(conn.pollInterval);
+            conn.pollInterval = null;
+          }
+          conn.lastMessageTimestamp = null;
+          conn.pollInterval = setInterval(async () => {
+            if (!conn.ticketId || !conn.ws || conn.ws.readyState !== 1) return;
+            try {
+              if (!conn.lastMessageTimestamp) {
+                const latest = (await sql`
+                  select created_at
+                  from ticket_messages
+                  where ticket_id = ${conn.ticketId}
+                  order by created_at desc
+                  limit 1
+                `) as Array<{ created_at: string }>;
+                if (latest[0]) {
+                  conn.lastMessageTimestamp = latest[0].created_at;
+                }
+                return;
+              }
+
+              const rows = (await sql`
+                select 
+                  id,
+                  ticket_id,
+                  user_id,
+                  sender_type,
+                  content,
+                  created_at
+                from ticket_messages
+                where ticket_id = ${conn.ticketId}
+                  and created_at > ${conn.lastMessageTimestamp}
+                order by created_at asc
+              `) as Array<{
+                id: string;
+                ticket_id: string;
+                user_id: string | null;
+                sender_type: "user" | "support";
+                content: string;
+                created_at: string;
+              }>;
+
+              if (rows.length > 0) {
+                for (const message of rows) {
+                  conn.ws.send(JSON.stringify({ type: "message", message }));
+                  if (!conn.lastMessageTimestamp || message.created_at > conn.lastMessageTimestamp) {
+                    conn.lastMessageTimestamp = message.created_at;
+                  }
+                }
+              }
+            } catch {
+            }
+          }, 2000);
+        }
 
           if (parsed.streamType === "tickets" || parsed.streamType === "transactions") {
             if (conn.userId) {
