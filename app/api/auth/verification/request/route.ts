@@ -52,6 +52,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
+    console.error("[auth/verification/request] Failed to send code:", error);
     return NextResponse.json({ error: "Failed to send code" }, { status: 500 });
   }
 }
