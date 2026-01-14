@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { getCache, setCache, deleteCache } from "@/lib/cache";
 import { randomUUID } from "crypto";
 import { ensureUncategorizedCategory, getOrCreateCategoryByName } from "@/lib/data";
 
@@ -61,7 +62,14 @@ const mapTransaction = (row: TransactionRow) => ({
   createdAt: row.created_at
 });
 
-async function getTransactions(userId: string) {
+const TRANSACTIONS_CACHE_TTL_MS = 10_000;
+
+async function getTransactions(userId: string, bypassCache = false) {
+  const cacheKey = `user-transactions:${userId}`;
+  if (!bypassCache) {
+    const cached = await getCache<ReturnType<typeof mapTransaction>[]>(cacheKey);
+    if (cached) return cached;
+  }
   const rows = (await sql`
     select
       t.id,
@@ -78,7 +86,9 @@ async function getTransactions(userId: string) {
     order by created_at desc
     limit 500
   `) as TransactionRow[];
-  return rows.map(mapTransaction);
+  const mapped = rows.map(mapTransaction);
+  await setCache(cacheKey, mapped, TRANSACTIONS_CACHE_TTL_MS);
+  return mapped;
 }
 
 export async function GET(request: Request) {
@@ -160,7 +170,8 @@ export async function POST(request: Request) {
         ${createdAt ?? null}
       )
     `;
-    const transactions = await getTransactions(userId);
+    await deleteCache(`user-transactions:${userId}`);
+    const transactions = await getTransactions(userId, true);
     return NextResponse.json({ transactionId: id, transactions }, { status: 201, headers: corsHeaders });
   } catch (error) {
     return NextResponse.json({ error: "Failed to save transaction" }, { status: 500, headers: corsHeaders });

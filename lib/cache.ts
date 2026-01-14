@@ -95,3 +95,16 @@ export async function setCache<T>(key: string, value: T, ttlMs: number) {
     console.error("[redis] set error", err);
   }
 }
+
+export async function deleteCache(key: string) {
+  localCache.delete(key);
+
+  const client = await getRedisClient();
+  if (!client) return;
+
+  try {
+    await client.del(key);
+  } catch (err) {
+    console.error("[redis] del error", err);
+  }
+}

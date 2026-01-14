@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { getCache, setCache, deleteCache } from "@/lib/cache";
 import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +61,14 @@ const mapCard = (row: CardRow) => ({
   tags: row.tags ?? []
 });
 
-async function getCards(userId: string) {
+const CARDS_CACHE_TTL_MS = 10_000;
+
+async function getCards(userId: string, bypassCache = false) {
+  const cacheKey = `user-cards:${userId}`;
+  if (!bypassCache) {
+    const cached = await getCache<ReturnType<typeof mapCard>[]>(cacheKey);
+    if (cached) return cached;
+  }
   const rows = (await sql`
     select
       id,
@@ -75,7 +83,9 @@ async function getCards(userId: string) {
     where user_id = ${userId}
     order by created_at desc
   `) as CardRow[];
-  return rows.map(mapCard);
+  const mapped = rows.map(mapCard);
+  await setCache(cacheKey, mapped, CARDS_CACHE_TTL_MS);
+  return mapped;
 }
 
 async function recalcUserBalance(userId: string) {
@@ -175,7 +185,8 @@ export async function POST(request: Request) {
       )
     `;
     await recalcUserBalance(userId);
-    const cards = await getCards(userId);
+    await deleteCache(`user-cards:${userId}`);
+    const cards = await getCards(userId, true);
     return NextResponse.json({ cardId: id, cards }, { status: 201, headers: corsHeaders });
   } catch (error) {
     return NextResponse.json({ error: "Failed to save card" }, { status: 500, headers: corsHeaders });
@@ -204,7 +215,8 @@ export async function PATCH(request: Request) {
       where id = ${id} and user_id = ${userId}
     `;
     await recalcUserBalance(userId);
-    const cards = await getCards(userId);
+    await deleteCache(`user-cards:${userId}`);
+    const cards = await getCards(userId, true);
     return NextResponse.json({ cards }, { status: 200, headers: corsHeaders });
   } catch (error) {
     return NextResponse.json({ error: "Failed to update card" }, { status: 500, headers: corsHeaders });
@@ -222,7 +234,8 @@ export async function DELETE(request: Request) {
   try {
     await sql`delete from cards where id = ${id} and user_id = ${userId}`;
     await recalcUserBalance(userId);
-    const cards = await getCards(userId);
+    await deleteCache(`user-cards:${userId}`);
+    const cards = await getCards(userId, true);
     return NextResponse.json({ cards }, { status: 200, headers: corsHeaders });
   } catch (error) {
     return NextResponse.json({ error: "Failed to delete card" }, { status: 500, headers: corsHeaders });
