@@ -188,8 +188,8 @@ export async function POST(
     }
 
     const ticketRows = (await sql`
-      select user_id, status from tickets where id = ${ticketId} limit 1
-    `) as Array<{ user_id: string; status: string }>;
+      select user_id, status, subject from tickets where id = ${ticketId} limit 1
+    `) as Array<{ user_id: string; status: string; subject: string | null }>;
 
     if (!ticketRows[0]) {
       return NextResponse.json(
@@ -270,6 +270,9 @@ export async function POST(
     try {
       if ((global as any).wsBroadcast) {
         (global as any).wsBroadcast.toTicket(ticketId, messageData);
+        if (newMessage[0]?.sender_type === "support" && newMessage[0]?.user_id) {
+          (global as any).wsBroadcast.toUser(newMessage[0].user_id, messageData);
+        }
       }
     } catch (error) {
     }
