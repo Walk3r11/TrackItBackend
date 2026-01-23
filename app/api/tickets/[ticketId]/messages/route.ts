@@ -122,7 +122,9 @@ export async function GET(
         user_id,
         sender_type,
         content,
-        created_at
+        created_at,
+        read_by_user_at,
+        read_by_support_at
       from ticket_messages
       where ticket_id = ${ticketId}
       order by created_at asc
@@ -133,6 +135,8 @@ export async function GET(
       sender_type: "user" | "support";
       content: string;
       created_at: string;
+      read_by_user_at: string | null;
+      read_by_support_at: string | null;
     }>;
 
     return NextResponse.json({ messages }, { headers: corsHeaders });
@@ -230,9 +234,27 @@ export async function POST(
     const messageUserId = isSupportAccess ? null : userId;
 
     const messageId = randomUUID();
+    const readByUserAt = sender_type === "user" ? new Date() : null;
+    const readBySupportAt = sender_type === "support" ? new Date() : null;
     await sql`
-      insert into ticket_messages (id, ticket_id, user_id, sender_type, content)
-      values (${messageId}, ${ticketId}, ${messageUserId}, ${sender_type}, ${content.trim()})
+      insert into ticket_messages (
+        id,
+        ticket_id,
+        user_id,
+        sender_type,
+        content,
+        read_by_user_at,
+        read_by_support_at
+      )
+      values (
+        ${messageId},
+        ${ticketId},
+        ${messageUserId},
+        ${sender_type},
+        ${content.trim()},
+        ${readByUserAt},
+        ${readBySupportAt}
+      )
     `;
 
     await sql`
@@ -252,7 +274,9 @@ export async function POST(
         user_id,
         sender_type,
         content,
-        created_at
+        created_at,
+        read_by_user_at,
+        read_by_support_at
       from ticket_messages
       where id = ${messageId}
       limit 1
@@ -263,6 +287,8 @@ export async function POST(
       sender_type: "user" | "support";
       content: string;
       created_at: string;
+      read_by_user_at: string | null;
+      read_by_support_at: string | null;
     }>;
 
     const messageData = { type: "message", message: newMessage[0] };

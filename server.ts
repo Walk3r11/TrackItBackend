@@ -236,7 +236,9 @@ app.prepare().then(() => {
                   user_id,
                   sender_type,
                   content,
-                  created_at
+                  created_at,
+                  read_by_user_at,
+                  read_by_support_at
                 from ticket_messages
                 where ticket_id = ${conn.ticketId}
                   and created_at > ${conn.lastMessageTimestamp}
@@ -248,6 +250,8 @@ app.prepare().then(() => {
                 sender_type: "user" | "support";
                 content: string;
                 created_at: string;
+                read_by_user_at: string | null;
+                read_by_support_at: string | null;
               }>;
 
               if (rows.length > 0) {

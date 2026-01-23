@@ -260,7 +260,7 @@ export class WebSocketHandler {
         }
 
         const messages = (await sql`
-          select id, ticket_id, user_id, sender_type, content, created_at
+          select id, ticket_id, user_id, sender_type, content, created_at, read_by_user_at, read_by_support_at
           from ticket_messages
           where ticket_id = ${this.ticketId}
             and created_at > ${this.lastMessageTimestamp}
@@ -272,6 +272,8 @@ export class WebSocketHandler {
           sender_type: "user" | "support";
           content: string;
           created_at: string;
+          read_by_user_at: string | null;
+          read_by_support_at: string | null;
         }>;
 
         if (messages.length > 0) {

@@ -5,7 +5,9 @@ create table if not exists ticket_messages (
   set null,
     sender_type text not null check (sender_type in ('user', 'support')),
     content text not null,
-    created_at timestamptz default now()
+    created_at timestamptz default now(),
+    read_by_user_at timestamptz,
+    read_by_support_at timestamptz
 );
 create index if not exists idx_ticket_messages_ticket on ticket_messages (ticket_id, created_at asc);
 create index if not exists idx_ticket_messages_user on ticket_messages (user_id, created_at desc);

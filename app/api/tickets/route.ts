@@ -178,8 +178,22 @@ export async function POST(request: Request) {
     ) {
       const messageId = randomUUID();
       await sql`
-        insert into ticket_messages (id, ticket_id, user_id, sender_type, content)
-        values (${messageId}, ${id}, ${userId}, 'user', ${initialMessage.trim()})
+        insert into ticket_messages (
+          id,
+          ticket_id,
+          user_id,
+          sender_type,
+          content,
+          read_by_user_at
+        )
+        values (
+          ${messageId},
+          ${id},
+          ${userId},
+          'user',
+          ${initialMessage.trim()},
+          ${new Date()}
+        )
       `;
     }
 
