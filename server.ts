@@ -30,6 +30,7 @@ interface Connection {
   streamType?: "tickets" | "ticket-messages" | "transactions";
   pollInterval?: NodeJS.Timeout | null;
   lastMessageTimestamp?: string | null;
+  lastTicketStatus?: string | null;
 }
 
 app.prepare().then(() => {
@@ -212,9 +213,18 @@ app.prepare().then(() => {
             conn.pollInterval = null;
           }
           conn.lastMessageTimestamp = null;
+          conn.lastTicketStatus = null;
           conn.pollInterval = setInterval(async () => {
             if (!conn.ticketId || !conn.ws || conn.ws.readyState !== 1) return;
             try {
+              const statusRow = (await sql`
+                select status from tickets where id = ${conn.ticketId} limit 1
+              `) as Array<{ status: string }>;
+              if (statusRow[0] && conn.lastTicketStatus !== null && conn.lastTicketStatus !== statusRow[0].status) {
+                conn.ws.send(JSON.stringify({ type: "status", status: statusRow[0].status }));
+              }
+              if (statusRow[0]) conn.lastTicketStatus = statusRow[0].status;
+
               if (!conn.lastMessageTimestamp) {
                 const latest = (await sql`
                   select created_at

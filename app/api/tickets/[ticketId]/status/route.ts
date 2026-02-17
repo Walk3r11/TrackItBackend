@@ -129,8 +129,8 @@ export async function PATCH(
     }
 
     const ticketRows = (await sql`
-      select user_id, status from tickets where id = ${ticketId} limit 1
-    `) as Array<{ user_id: string; status: string }>;
+      select user_id, status, subject, updated_at from tickets where id = ${ticketId} limit 1
+    `) as Array<{ user_id: string; status: string; subject: string | null; updated_at: string }>;
 
     if (!ticketRows[0]) {
       return NextResponse.json(
@@ -165,10 +165,21 @@ export async function PATCH(
     `;
 
     const statusData = { type: "status", status };
-    
+    const ticketUpdateData = {
+      type: "ticket",
+      data: {
+        id: ticketId,
+        status,
+        subject: ticketRows[0].subject ?? undefined,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+
     try {
-      if ((global as any).wsBroadcast) {
-        (global as any).wsBroadcast.toTicket(ticketId, statusData);
+      const wb = (global as any).wsBroadcast;
+      if (wb) {
+        wb.toTicket(ticketId, statusData);
+        wb.toUser(ticket.user_id, ticketUpdateData);
       }
     } catch (error) {
     }
