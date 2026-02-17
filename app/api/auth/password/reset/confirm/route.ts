@@ -61,7 +61,6 @@ export async function POST(request: Request) {
   const token = body.token?.trim();
   const newPassword = (body.newPassword ?? body.password)?.trim();
   const currentPepper = process.env.HASH_PEPPER_CURRENT;
-  const previousPepper = process.env.HASH_PEPPER_PREVIOUS;
 
   if (!email) {
     return NextResponse.json(
@@ -122,29 +121,6 @@ export async function POST(request: Request) {
         },
         { status: 400, headers }
       );
-    }
-    if (user.password_hash) {
-      const peppers = [
-        currentPepper,
-        ...(previousPepper ? [previousPepper] : []),
-      ];
-      let sameAsCurrent = false;
-      for (const p of peppers) {
-        const match = await bcrypt.compare(p + newPassword, user.password_hash);
-        if (match) {
-          sameAsCurrent = true;
-          break;
-        }
-      }
-      if (sameAsCurrent) {
-        return NextResponse.json(
-          {
-            error:
-              "Please choose a password you haven't used before for this account. If you're sure it's new, request a new reset link from the login page and try again.",
-          },
-          { status: 400, headers }
-        );
-      }
     }
 
     const tokenHash = hashToken(token);
