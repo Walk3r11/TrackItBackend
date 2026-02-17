@@ -7,6 +7,8 @@ type Payload = {
   email?: string;
   token?: string;
   newPassword?: string;
+  /** Alternative name some clients send */
+  password?: string;
 };
 
 const minPasswordLength = 8;
@@ -58,11 +60,17 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as Payload;
   const email = body.email?.trim().toLowerCase();
   const token = body.token?.trim();
-  const newPassword = body.newPassword?.trim();
+  const newPassword = (body.newPassword ?? body.password)?.trim();
   const pepper = process.env.HASH_PEPPER_CURRENT;
 
-  if (!email || !token || !newPassword) {
-    return NextResponse.json({ error: "Missing fields" }, { status: 400, headers });
+  if (!email) {
+    return NextResponse.json({ error: "Email is required" }, { status: 400, headers });
+  }
+  if (!token) {
+    return NextResponse.json({ error: "Reset token is required" }, { status: 400, headers });
+  }
+  if (!newPassword) {
+    return NextResponse.json({ error: "New password is required" }, { status: 400, headers });
   }
 
   if (!pepper) {
@@ -92,7 +100,10 @@ export async function POST(request: Request) {
 
     const user = users[0];
     if (!user) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 400, headers });
+      return NextResponse.json(
+        { error: "No account found for this email" },
+        { status: 400, headers }
+      );
     }
     if (user.password_hash) {
       const sameAsCurrent = await bcrypt.compare(pepper + newPassword, user.password_hash);
@@ -118,7 +129,10 @@ export async function POST(request: Request) {
 
     const record = rows[0];
     if (!record) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 400, headers });
+      return NextResponse.json(
+        { error: "Invalid or expired reset link. Request a new password reset." },
+        { status: 400, headers }
+      );
     }
 
     const newHash = await bcrypt.hash(pepper + newPassword, 12);
