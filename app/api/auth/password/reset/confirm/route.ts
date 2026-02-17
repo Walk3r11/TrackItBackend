@@ -7,7 +7,6 @@ type Payload = {
   email?: string;
   token?: string;
   newPassword?: string;
-  /** Alternative name some clients send */
   password?: string;
 };
 
@@ -61,20 +60,33 @@ export async function POST(request: Request) {
   const email = body.email?.trim().toLowerCase();
   const token = body.token?.trim();
   const newPassword = (body.newPassword ?? body.password)?.trim();
-  const pepper = process.env.HASH_PEPPER_CURRENT;
+  const currentPepper = process.env.HASH_PEPPER_CURRENT;
+  const previousPepper = process.env.HASH_PEPPER_PREVIOUS;
 
   if (!email) {
-    return NextResponse.json({ error: "Email is required" }, { status: 400, headers });
+    return NextResponse.json(
+      { error: "Please enter your email address." },
+      { status: 400, headers }
+    );
   }
   if (!token) {
-    return NextResponse.json({ error: "Reset token is required" }, { status: 400, headers });
+    return NextResponse.json(
+      { error: "Please enter the code from your reset email." },
+      { status: 400, headers }
+    );
   }
   if (!newPassword) {
-    return NextResponse.json({ error: "New password is required" }, { status: 400, headers });
+    return NextResponse.json(
+      { error: "Please enter a new password." },
+      { status: 400, headers }
+    );
   }
 
-  if (!pepper) {
-    return NextResponse.json({ error: "Server misconfigured" }, { status: 500, headers });
+  if (!currentPepper) {
+    return NextResponse.json(
+      { error: "Something went wrong on our side. Please try again later." },
+      { status: 500, headers }
+    );
   }
 
   if (
@@ -85,7 +97,10 @@ export async function POST(request: Request) {
     !passwordPolicy.special.test(newPassword)
   ) {
     return NextResponse.json(
-      { error: "Password must be 8+ chars with upper, lower, number, and special." },
+      {
+        error:
+          "Use at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a symbol (e.g. ! or @).",
+      },
       { status: 400, headers }
     );
   }
@@ -101,15 +116,32 @@ export async function POST(request: Request) {
     const user = users[0];
     if (!user) {
       return NextResponse.json(
-        { error: "No account found for this email" },
+        {
+          error:
+            "We don't have an account with that email. Double-check the address or sign up for a new account.",
+        },
         { status: 400, headers }
       );
     }
     if (user.password_hash) {
-      const sameAsCurrent = await bcrypt.compare(pepper + newPassword, user.password_hash);
+      const peppers = [
+        currentPepper,
+        ...(previousPepper ? [previousPepper] : []),
+      ];
+      let sameAsCurrent = false;
+      for (const p of peppers) {
+        const match = await bcrypt.compare(p + newPassword, user.password_hash);
+        if (match) {
+          sameAsCurrent = true;
+          break;
+        }
+      }
       if (sameAsCurrent) {
         return NextResponse.json(
-          { error: "New password must be different from the current password." },
+          {
+            error:
+              "Please choose a password you haven't used before for this account. If you're sure it's new, request a new reset link from the login page and try again.",
+          },
           { status: 400, headers }
         );
       }
@@ -130,12 +162,15 @@ export async function POST(request: Request) {
     const record = rows[0];
     if (!record) {
       return NextResponse.json(
-        { error: "Invalid or expired reset link. Request a new password reset." },
+        {
+          error:
+            "This reset link has expired or was already used. Please request a new one from the login page.",
+        },
         { status: 400, headers }
       );
     }
 
-    const newHash = await bcrypt.hash(pepper + newPassword, 12);
+    const newHash = await bcrypt.hash(currentPepper + newPassword, 12);
     await sql`update users set password_hash = ${newHash} where id = ${user.id}`;
     await sql`update password_resets set used_at = now() where id = ${record.id}`;
     await sql`
@@ -147,6 +182,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true }, { headers });
   } catch (error) {
-    return NextResponse.json({ error: "Failed to reset password" }, { status: 500, headers });
+    return NextResponse.json(
+      { error: "Something went wrong on our side. Please try again in a few minutes." },
+      { status: 500, headers }
+    );
   }
 }
