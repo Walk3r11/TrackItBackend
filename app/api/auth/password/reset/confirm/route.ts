@@ -147,7 +147,13 @@ export async function POST(request: Request) {
     }
 
     const newHash = await bcrypt.hash(currentPepper + newPassword, 12);
-    await sql`update users set password_hash = ${newHash} where id = ${user.id}`;
+    
+    const updateResult = await sql`
+      update users 
+      set password_hash = ${newHash} 
+      where id = ${user.id}
+    `;
+    
     await sql`update password_resets set used_at = now() where id = ${record.id}`;
     await sql`
       update auth_sessions
