@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { randomUUID } from "crypto";
 import { getSessionUserId, verifySupportJwt } from "@/lib/auth";
+import { normalizeTicketId } from "@/lib/ticket-id";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -34,7 +35,7 @@ export async function GET(
   { params }: { params: { ticketId: string } }
 ) {
   const corsHeaders = getCorsHeaders(request);
-  const ticketId = params.ticketId;
+  const ticketId = normalizeTicketId(params.ticketId);
   if (!ticketId) {
     return NextResponse.json(
       { error: "Missing ticketId" },
@@ -120,7 +121,7 @@ export async function POST(
   { params }: { params: { ticketId: string } }
 ) {
   const corsHeaders = getCorsHeaders(request);
-  const ticketId = params.ticketId;
+  const ticketId = normalizeTicketId(params.ticketId);
   if (!ticketId) {
     return NextResponse.json(
       { error: "Missing ticketId" },
@@ -262,8 +263,9 @@ export async function POST(
     try {
       if ((global as any).wsBroadcast) {
         (global as any).wsBroadcast.toTicket(ticketId, messageData);
-        if (newMessage[0]?.sender_type === "support" && newMessage[0]?.user_id) {
-          (global as any).wsBroadcast.toUser(newMessage[0].user_id, messageData);
+        const ownerUserId = ticketRows[0].user_id;
+        if (newMessage[0]?.sender_type === "support" && ownerUserId) {
+          (global as any).wsBroadcast.toUser(ownerUserId, messageData);
         }
       }
     } catch (error) {

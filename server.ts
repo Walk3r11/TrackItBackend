@@ -5,6 +5,7 @@ import { WebSocketServer } from "ws";
 import { randomUUID } from "crypto";
 import { authenticateWebSocketConnection } from "./lib/websocket";
 import { sql } from "./lib/db";
+import { normalizeTicketId } from "./lib/ticket-id";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "0.0.0.0";
@@ -203,8 +204,13 @@ app.prepare().then(() => {
           }
 
         if (parsed.streamType === "ticket-messages" && parsed.ticketId) {
+          const normalizedTicketId = normalizeTicketId(parsed.ticketId);
+          if (!normalizedTicketId) {
+            ws.send(JSON.stringify({ type: "error", error: "Invalid ticket id" }));
+            return;
+          }
           const ticketRows = (await sql`
-            select user_id from tickets where id = ${parsed.ticketId} limit 1
+            select user_id from tickets where id = ${normalizedTicketId} limit 1
           `) as Array<{ user_id: string }>;
           if (!ticketRows[0]) {
             ws.send(JSON.stringify({ type: "error", error: "Ticket not found" }));
@@ -214,17 +220,20 @@ app.prepare().then(() => {
             ws.send(JSON.stringify({ type: "error", error: "Forbidden" }));
             return;
           }
-          if (!ticketConnections.has(parsed.ticketId)) {
-            ticketConnections.set(parsed.ticketId, new Set());
+          const ticketChanged = conn.ticketId !== normalizedTicketId;
+          if (!ticketConnections.has(normalizedTicketId)) {
+            ticketConnections.set(normalizedTicketId, new Set());
           }
-          ticketConnections.get(parsed.ticketId)!.add(connectionId);
-          conn.ticketId = parsed.ticketId;
+          ticketConnections.get(normalizedTicketId)!.add(connectionId);
+          conn.ticketId = normalizedTicketId;
           if (conn.pollInterval) {
             clearInterval(conn.pollInterval);
             conn.pollInterval = null;
           }
-          conn.lastMessageTimestamp = null;
-          conn.lastTicketStatus = null;
+          if (ticketChanged) {
+            conn.lastMessageTimestamp = null;
+            conn.lastTicketStatus = null;
+          }
           conn.pollInterval = setInterval(async () => {
             if (!conn.ticketId || !conn.ws || conn.ws.readyState !== 1) return;
             try {

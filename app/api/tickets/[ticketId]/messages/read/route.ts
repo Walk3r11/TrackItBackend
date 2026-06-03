@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getSessionUserId, verifySupportJwt } from "@/lib/auth";
+import { normalizeTicketId } from "@/lib/ticket-id";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -30,7 +31,7 @@ export async function POST(
   { params }: { params: { ticketId: string } }
 ) {
   const corsHeaders = getCorsHeaders(request);
-  const ticketId = params.ticketId;
+  const ticketId = normalizeTicketId(params.ticketId);
   if (!ticketId) {
     return NextResponse.json(
       { error: "Missing ticketId" },
