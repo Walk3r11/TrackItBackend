@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { unauthorizedResponse, verifySupportJwt } from "@/lib/auth";
 
 type Numeric = string | number | null;
 
 const toNumber = (value: Numeric) => Number(value ?? 0);
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!(await verifySupportJwt(request))) {
+    return unauthorizedResponse({}, "Unauthorized");
+  }
+
   try {
     const [summary] = (await sql`
       select
