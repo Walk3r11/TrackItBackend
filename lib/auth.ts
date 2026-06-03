@@ -84,6 +84,23 @@ export async function requireSessionForUserId(
   return { userId: sessionUserId };
 }
 
+/** App session (own data) or support JWT (read any userId) — for dashboard user lookup. */
+export async function requireSessionOrSupportForUserId(
+  request: Request,
+  requestedUserId: string | null | undefined,
+  corsHeaders: Record<string, string>
+): Promise<{ userId: string } | NextResponse> {
+  if (!requestedUserId) {
+    return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
+  }
+
+  if (await verifySupportJwt(request)) {
+    return { userId: requestedUserId };
+  }
+
+  return requireSessionForUserId(request, requestedUserId, corsHeaders);
+}
+
 export async function verifyAppUserPassword(email: string, password: string): Promise<boolean> {
   const authRow = await getAppUserAuth(email);
   if (!authRow) return false;

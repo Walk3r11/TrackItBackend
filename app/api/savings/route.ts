@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getSavingsGoal, updateSavingsGoal } from "@/lib/data";
-import { requireSessionForUserId } from "@/lib/auth";
+import { requireSessionForUserId, requireSessionOrSupportForUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -56,7 +56,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userIdParam = searchParams.get("userId");
   if (!userIdParam) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
-  const auth = await requireSessionForUserId(request, userIdParam, corsHeaders);
+  const auth = await requireSessionOrSupportForUserId(request, userIdParam, corsHeaders);
   if (auth instanceof NextResponse) return auth;
   const userId = auth.userId;
 
