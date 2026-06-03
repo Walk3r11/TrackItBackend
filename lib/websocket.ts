@@ -21,14 +21,18 @@ export async function authenticateWebSocketConnection(
 ): Promise<AuthenticatedConnection | null> {
   if (!token) return null;
 
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) return null;
+
   try {
-    const JWT_SECRET = new TextEncoder().encode(
-      process.env.JWT_SECRET || "trackit-secret"
-    );
+    const JWT_SECRET = new TextEncoder().encode(jwtSecret);
 
     try {
       const { payload } = await jwtVerify(token, JWT_SECRET);
-      if (payload.role === "support" && supportUserId) {
+      if (payload.role === "support") {
+        if (!supportUserId || typeof supportUserId !== "string") {
+          return null;
+        }
         return {
           userId: supportUserId,
           isSupport: true,

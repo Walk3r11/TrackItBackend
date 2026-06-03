@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { lookupSupportUser, getUserSeries } from "@/lib/data";
+import { verifySupportJwt } from "@/lib/auth";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -32,6 +33,11 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("query");
   if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400, headers: corsHeaders });
+
+  const isSupport = await verifySupportJwt(request);
+  if (!isSupport) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+  }
 
   try {
     const result = await lookupSupportUser(query);

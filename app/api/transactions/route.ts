@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { getCache, setCache, deleteCache } from "@/lib/cache";
 import { randomUUID } from "crypto";
 import { ensureUncategorizedCategory, getOrCreateCategoryByName } from "@/lib/data";
+import { requireSessionForUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -94,8 +95,11 @@ async function getTransactions(userId: string, bypassCache = false) {
 export async function GET(request: Request) {
   const corsHeaders = getCorsHeaders(request);
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId");
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
+  const userIdParam = searchParams.get("userId");
+  if (!userIdParam) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
+  const auth = await requireSessionForUserId(request, userIdParam, corsHeaders);
+  if (auth instanceof NextResponse) return auth;
+  const userId = auth.userId;
   try {
     const transactions = await getTransactions(userId);
     return NextResponse.json({ transactions }, { headers: corsHeaders });
@@ -124,11 +128,14 @@ export async function POST(request: Request) {
   if (!userId || !cardId || amount == null) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: corsHeaders });
   }
+  const auth = await requireSessionForUserId(request, userId, corsHeaders);
+  if (auth instanceof NextResponse) return auth;
+  const sessionUserId = auth.userId;
   try {
     const cardRows = (await sql`
       select 1
       from cards
-      where id = ${cardId} and user_id = ${userId}
+      where id = ${cardId} and user_id = ${sessionUserId}
       limit 1
     `) as Array<{ "?column?": number }>;
     if (!cardRows[0]) {
@@ -144,17 +151,17 @@ export async function POST(request: Request) {
       const rows = (await sql`
         select id, name
         from categories
-        where id = ${categoryId} and user_id = ${userId}
+        where id = ${categoryId} and user_id = ${sessionUserId}
         limit 1
       `) as { id: string; name: string }[];
       if (rows[0]) resolvedCategory = { id: rows[0].id, name: rows[0].name };
     }
     if (!resolvedCategory && categoryName) {
-      const created = await getOrCreateCategoryByName(userId, categoryName);
+      const created = await getOrCreateCategoryByName(sessionUserId, categoryName);
       resolvedCategory = { id: created.id, name: created.name };
     }
     if (!resolvedCategory) {
-      const fallback = await ensureUncategorizedCategory(userId);
+      const fallback = await ensureUncategorizedCategory(sessionUserId);
       resolvedCategory = { id: fallback.id, name: fallback.name };
     }
 
@@ -162,7 +169,7 @@ export async function POST(request: Request) {
       insert into transactions (id, user_id, card_id, amount, category_id, category, created_at)
       values (
         ${id},
-        ${userId},
+        ${sessionUserId},
         ${cardId ?? null},
         ${amount},
         ${resolvedCategory.id},
@@ -170,8 +177,8 @@ export async function POST(request: Request) {
         ${createdAt ?? null}
       )
     `;
-    await deleteCache(`user-transactions:${userId}`);
-    const transactions = await getTransactions(userId, true);
+    await deleteCache(`user-transactions:${sessionUserId}`);
+    const transactions = await getTransactions(sessionUserId, true);
     return NextResponse.json({ transactionId: id, transactions }, { status: 201, headers: corsHeaders });
   } catch (error) {
     return NextResponse.json({ error: "Failed to save transaction" }, { status: 500, headers: corsHeaders });

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { SignJWT } from "jose";
+import { getAppUserAuth } from "@/lib/data";
+import { getJwtSecretKey, verifyAppUserPassword } from "@/lib/auth";
 
 type Payload = {
   email?: string;
@@ -39,17 +41,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing credentials" }, { status: 400, headers: corsHeaders });
   }
 
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
+  const secretKey = getJwtSecretKey();
+  if (!secretKey) {
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500, headers: corsHeaders });
   }
 
+  const existingUser = await getAppUserAuth(email);
+  let tokenType: "pre_auth" | "signup";
+
+  if (existingUser) {
+    const valid = await verifyAppUserPassword(email, password);
+    if (!valid) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
+    }
+    tokenType = "pre_auth";
+  } else {
+    tokenType = "signup";
+  }
+
   try {
-    const token = await new SignJWT({ email, password })
+    const token = await new SignJWT({ email, typ: tokenType })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
       .setExpirationTime("30m")
-      .sign(new TextEncoder().encode(secret));
+      .sign(secretKey);
 
     return NextResponse.json({ token }, { status: 200, headers: corsHeaders });
   } catch {

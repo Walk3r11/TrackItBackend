@@ -221,7 +221,7 @@ export async function POST(request: Request) {
     const userContext = {
       balance: userSummary?.balance ?? 0,
       monthlySpend: userSummary?.monthlySpend ?? 0,
-      recentTransactions: transactions.slice(0, 20),
+      recentTransactions: transactions.slice(0, 10),
       categories: categories.map((c) => ({ name: c.name, color: c.color })),
       savingsGoal: {
         amount: savingsGoal.goalAmount,
@@ -244,7 +244,6 @@ ${userContext.categories
         .map((c) => `- ${c.name}${c.color ? ` (${c.color})` : ""}`)
         .join("\n")}
 
-**Recent Transactions (last 20):**
 ${userContext.recentTransactions.length > 0
         ? userContext.recentTransactions
           .map(
@@ -318,15 +317,19 @@ Remember: Your purpose is to help users manage their finances and use the TrackI
         ];
 
     const shouldStream = stream ?? true;
+    const requestedMaxTokens = max_completion_tokens ?? max_tokens ?? 1024;
+    const safeMaxCompletionTokens = Math.min(Math.max(256, requestedMaxTokens), 1024);
+    const safeReasoningEffort =
+      reasoning_effort === "high" ? "medium" : reasoning_effort || "low";
 
     if (shouldStream) {
       const completion = await groq.chat.completions.create({
         model: model || "openai/gpt-oss-120b",
         messages: processedMessages,
         temperature: temperature ?? 1,
-        max_completion_tokens: max_completion_tokens ?? max_tokens ?? 4096,
+        max_completion_tokens: safeMaxCompletionTokens,
         top_p: top_p ?? 1,
-        reasoning_effort: reasoning_effort || "medium",
+        reasoning_effort: safeReasoningEffort,
         stream: true,
         stop: stop ?? null,
       });
@@ -372,9 +375,9 @@ Remember: Your purpose is to help users manage their finances and use the TrackI
         model: model || "openai/gpt-oss-120b",
         messages: processedMessages,
         temperature: temperature ?? 1,
-        max_completion_tokens: max_completion_tokens ?? max_tokens ?? 4096,
+        max_completion_tokens: safeMaxCompletionTokens,
         top_p: top_p ?? 1,
-        reasoning_effort: reasoning_effort || "medium",
+        reasoning_effort: safeReasoningEffort,
         stream: false,
         stop: stop ?? null,
       });

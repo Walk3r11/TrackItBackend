@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { getSessionUserId } from "@/lib/auth";
 
 async function removeUser(userId: string) {
   await sql`delete from users where id = ${userId}`;
@@ -7,23 +8,28 @@ async function removeUser(userId: string) {
 
 async function handle(request: Request) {
   try {
-    let userId: string | null = null;
+    const sessionUserId = await getSessionUserId(request);
+    if (!sessionUserId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    let requestedUserId: string | null = null;
 
     if (request.method === "POST") {
       const body = await request.json().catch(() => ({}));
-      userId = (body as any)?.userId ?? null;
+      requestedUserId = (body as { userId?: string })?.userId ?? null;
     } else {
       const { searchParams } = new URL(request.url);
-      userId = searchParams.get("userId");
+      requestedUserId = searchParams.get("userId");
     }
 
-    if (!userId) {
-      return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+    if (requestedUserId && requestedUserId !== sessionUserId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await removeUser(userId);
+    await removeUser(sessionUserId);
     return NextResponse.json({ deleted: true }, { status: 200 });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to delete account" }, { status: 500 });
   }
 }

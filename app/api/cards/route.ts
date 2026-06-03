@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getCache, setCache, deleteCache } from "@/lib/cache";
 import { randomUUID } from "crypto";
+import { requireSessionForUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -150,8 +151,11 @@ function parseLimits(body: any) {
 export async function GET(request: Request) {
   const corsHeaders = getCorsHeaders(request);
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId");
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
+  const userIdParam = searchParams.get("userId");
+  if (!userIdParam) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
+  const auth = await requireSessionForUserId(request, userIdParam, corsHeaders);
+  if (auth instanceof NextResponse) return auth;
+  const userId = auth.userId;
   try {
     const cards = await getCards(userId);
     return NextResponse.json({ cards }, { headers: corsHeaders });
@@ -163,10 +167,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const corsHeaders = getCorsHeaders(request);
   const body = await request.json();
-  const { userId, nickname, balance, tags } = body;
-  if (!userId || !nickname) {
+  const { userId: userIdParam, nickname, balance, tags } = body;
+  if (!userIdParam || !nickname) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: corsHeaders });
   }
+  const auth = await requireSessionForUserId(request, userIdParam, corsHeaders);
+  if (auth instanceof NextResponse) return auth;
+  const userId = auth.userId;
   try {
     const id = isUuid(body?.id) ? body.id : randomUUID();
     const limits = parseLimits(body);
@@ -196,10 +203,13 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const corsHeaders = getCorsHeaders(request);
   const body = await request.json();
-  const { id, userId, balance, tags, nickname } = body;
-  if (!id || !userId) {
+  const { id, userId: userIdParam, balance, tags, nickname } = body;
+  if (!id || !userIdParam) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: corsHeaders });
   }
+  const auth = await requireSessionForUserId(request, userIdParam, corsHeaders);
+  if (auth instanceof NextResponse) return auth;
+  const userId = auth.userId;
   try {
     const limits = parseLimits(body);
     await sql`
@@ -227,10 +237,13 @@ export async function DELETE(request: Request) {
   const corsHeaders = getCorsHeaders(request);
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
-  const userId = searchParams.get("userId");
-  if (!id || !userId) {
+  const userIdParam = searchParams.get("userId");
+  if (!id || !userIdParam) {
     return NextResponse.json({ error: "Missing id or userId" }, { status: 400, headers: corsHeaders });
   }
+  const auth = await requireSessionForUserId(request, userIdParam, corsHeaders);
+  if (auth instanceof NextResponse) return auth;
+  const userId = auth.userId;
   try {
     await sql`delete from cards where id = ${id} and user_id = ${userId}`;
     await recalcUserBalance(userId);

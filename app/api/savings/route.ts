@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getSavingsGoal, updateSavingsGoal } from "@/lib/data";
+import { requireSessionForUserId } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -53,8 +54,11 @@ async function getNetSavedForPeriod(userId: string, period: "daily" | "weekly" |
 export async function GET(request: Request) {
   const corsHeaders = getCorsHeaders(request);
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId");
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
+  const userIdParam = searchParams.get("userId");
+  if (!userIdParam) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
+  const auth = await requireSessionForUserId(request, userIdParam, corsHeaders);
+  if (auth instanceof NextResponse) return auth;
+  const userId = auth.userId;
 
   try {
     const goal = await getSavingsGoal(userId);
@@ -80,8 +84,11 @@ export async function PATCH(request: Request) {
     goalAmount?: number | null;
     goalPeriod?: string;
   };
-  const userId = body.userId;
-  if (!userId) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
+  const userIdParam = body.userId;
+  if (!userIdParam) return NextResponse.json({ error: "Missing userId" }, { status: 400, headers: corsHeaders });
+  const auth = await requireSessionForUserId(request, userIdParam, corsHeaders);
+  if (auth instanceof NextResponse) return auth;
+  const userId = auth.userId;
 
   try {
     const goal = await updateSavingsGoal({ userId, goalAmount: body.goalAmount, goalPeriod: body.goalPeriod });

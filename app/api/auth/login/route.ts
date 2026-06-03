@@ -50,14 +50,16 @@ export async function POST(request: Request) {
   const previousPepper = process.env.HASH_PEPPER_PREVIOUS;
 
   let email = body.email?.trim().toLowerCase();
-  let password = body.password?.trim();
+  const password = body.password?.trim();
 
   if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
     const bearerToken = authHeader.slice(7).trim();
     try {
       const { payload } = await jwtVerify(bearerToken, new TextEncoder().encode(secret));
+      if (payload.typ !== "pre_auth") {
+        return NextResponse.json({ error: "Invalid auth token" }, { status: 401, headers: corsHeaders });
+      }
       if (typeof payload.email === "string") email = payload.email.toLowerCase();
-      if (typeof payload.password === "string") password = payload.password;
     } catch {
       return NextResponse.json({ error: "Invalid auth token" }, { status: 401, headers: corsHeaders });
     }

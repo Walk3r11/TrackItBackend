@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { getUserTickets } from "@/lib/data";
 import { sql } from "@/lib/db";
 import { randomUUID } from "crypto";
-import { jwtVerify } from "jose";
-import { hashToken } from "@/lib/tokens";
+import { getSessionUserId, requireSessionForUserId, verifySupportJwt } from "@/lib/auth";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -24,81 +23,6 @@ function getCorsHeaders(request: Request) {
   };
 }
 
-async function authenticateUser(request: Request): Promise<string | null> {
-  const authHeader = request.headers.get("authorization");
-  const cookieHeader = request.headers.get("cookie");
-  let token: string | null = null;
-
-  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
-    token = authHeader.slice(7).trim();
-  } else if (cookieHeader) {
-    const cookieMatch = cookieHeader.match(/auth-token=([^;]+)/);
-    if (cookieMatch) token = cookieMatch[1];
-  }
-
-  if (!token) {
-    return null;
-  }
-
-  try {
-    const tokenHash = hashToken(token);
-    const rows = (await sql`
-      select u.id as user_id
-      from auth_sessions s
-      join users u on u.id = s.user_id
-      where s.token_hash = ${tokenHash}
-        and s.revoked_at is null
-        and s.expires_at > now()
-      limit 1
-    `) as Array<{ user_id: string }>;
-
-    return rows[0]?.user_id ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function authenticateSupport(request: Request): Promise<{ authenticated: boolean; error?: string; userId?: string; isSupport?: boolean }> {
-  const cookieHeader = request.headers.get("cookie");
-  const authHeader = request.headers.get("authorization");
-  
-  let token: string | null = null;
-  
-  if (authHeader?.startsWith("Bearer ")) {
-    token = authHeader.slice(7).trim();
-  } else if (cookieHeader) {
-    const cookieMatch = cookieHeader.match(/auth-token=([^;]+)/);
-    if (cookieMatch) token = cookieMatch[1];
-  }
-
-  if (!token) {
-    return { authenticated: false, error: "No token provided" };
-  }
-
-  try {
-    const JWT_SECRET = new TextEncoder().encode(
-      process.env.JWT_SECRET || "trackit-secret"
-    );
-    
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    if (payload.role === "support") {
-      return { authenticated: true, isSupport: true };
-    } else {
-      const userId = await authenticateUser(request);
-      if (userId) {
-        return { authenticated: true, userId, isSupport: false };
-      }
-      return { authenticated: false, error: "Not a support user" };
-    }
-  } catch (error) {
-    const userId = await authenticateUser(request);
-    if (userId) {
-      return { authenticated: true, userId, isSupport: false };
-    }
-    return { authenticated: false, error: "Invalid token" };
-  }
-}
-
 export async function OPTIONS(request: Request) {
   return new NextResponse(null, { status: 204, headers: getCorsHeaders(request) });
 }
@@ -110,40 +34,38 @@ export async function GET(request: Request) {
   const userIdParam = searchParams.get("userId");
   const status = searchParams.get("status") ?? undefined;
   
-  const authenticatedUserId = await authenticateUser(request);
-  const auth = await authenticateSupport(request);
-  
-  const isSupportUser = auth.authenticated && auth.isSupport === true;
-  
-  if (!auth.authenticated) {
-    if (!userIdParam) {
+  const sessionUserId = await getSessionUserId(request);
+  const isSupportUser = await verifySupportJwt(request);
+
+  if (isSupportUser) {
+    try {
+      if (userIdParam) {
+        const tickets = await getUserTickets(userIdParam, status ?? undefined);
+        return NextResponse.json({ tickets }, { headers: corsHeaders });
+      }
+      const { getAllTickets } = await import("@/lib/data");
+      const tickets = await getAllTickets(status ?? undefined);
+      return NextResponse.json({ tickets }, { headers: corsHeaders });
+    } catch (error) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401, headers: corsHeaders }
-      );
-    }
-    if (!authenticatedUserId || authenticatedUserId !== userIdParam) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401, headers: corsHeaders }
+        { tickets: [], error: error instanceof Error ? error.message : "Failed to load tickets" },
+        { status: 500, headers: corsHeaders }
       );
     }
   }
 
+  if (!sessionUserId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+  }
+
+  const targetUserId = userIdParam ?? sessionUserId;
+  if (targetUserId !== sessionUserId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403, headers: corsHeaders });
+  }
+
   try {
-    if (userIdParam) {
-      const tickets = await getUserTickets(userIdParam, status ?? undefined);
-      return NextResponse.json({ tickets }, { headers: corsHeaders });
-    } else if (isSupportUser) {
-      const { getAllTickets } = await import("@/lib/data");
-      const tickets = await getAllTickets(status ?? undefined);
-      return NextResponse.json({ tickets }, { headers: corsHeaders });
-    } else {
-      return NextResponse.json(
-        { error: "Missing userId" },
-        { status: 400, headers: corsHeaders }
-      );
-    }
+    const tickets = await getUserTickets(targetUserId, status ?? undefined);
+    return NextResponse.json({ tickets }, { headers: corsHeaders });
   } catch (error) {
     return NextResponse.json(
       { tickets: [], error: error instanceof Error ? error.message : "Failed to load tickets" },
@@ -162,11 +84,14 @@ export async function POST(request: Request) {
       { status: 400, headers: corsHeaders }
     );
   }
+  const auth = await requireSessionForUserId(request, userId, corsHeaders);
+  if (auth instanceof NextResponse) return auth;
+  const sessionUserId = auth.userId;
   try {
     const id = randomUUID();
     await sql`
       insert into tickets (id, user_id, subject, status, priority)
-      values (${id}, ${userId}, ${subject}, ${status ?? "pending"}, ${
+      values (${id}, ${sessionUserId}, ${subject}, ${status ?? "pending"}, ${
       priority ?? null
     })
     `;
@@ -189,7 +114,7 @@ export async function POST(request: Request) {
         values (
           ${messageId},
           ${id},
-          ${userId},
+          ${sessionUserId},
           'user',
           ${initialMessage.trim()},
           ${new Date()}
@@ -199,7 +124,7 @@ export async function POST(request: Request) {
 
     let tickets: Array<{ id: string; userId: string; subject: string; status: "open" | "pending" | "closed"; priority: "low" | "medium" | "high" | null | undefined; updatedAt: string; createdAt: string }> = [];
     try {
-      tickets = await getUserTickets(userId, "all");
+      tickets = await getUserTickets(sessionUserId, "all");
     } catch (ticketsError) {
       console.error("Error fetching tickets after creation (non-fatal):", ticketsError);
     }

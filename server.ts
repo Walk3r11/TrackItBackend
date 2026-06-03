@@ -184,7 +184,7 @@ app.prepare().then(() => {
             return;
           }
 
-          const userId = parsed.userId || auth.userId;
+          const userId = auth.userId;
           connections.set(connectionId, { ws, auth, userId });
           
           if (userId) {
@@ -203,6 +203,17 @@ app.prepare().then(() => {
           }
 
         if (parsed.streamType === "ticket-messages" && parsed.ticketId) {
+          const ticketRows = (await sql`
+            select user_id from tickets where id = ${parsed.ticketId} limit 1
+          `) as Array<{ user_id: string }>;
+          if (!ticketRows[0]) {
+            ws.send(JSON.stringify({ type: "error", error: "Ticket not found" }));
+            return;
+          }
+          if (!conn.auth?.isSupport && ticketRows[0].user_id !== conn.userId) {
+            ws.send(JSON.stringify({ type: "error", error: "Forbidden" }));
+            return;
+          }
           if (!ticketConnections.has(parsed.ticketId)) {
             ticketConnections.set(parsed.ticketId, new Set());
           }

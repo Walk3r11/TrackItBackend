@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { hashToken } from "@/lib/tokens";
+import { getSessionUserId, verifySupportJwt } from "@/lib/auth";
 
 function getCorsHeaders(request: Request) {
   const origin = request.headers.get("origin");
@@ -25,40 +25,6 @@ export function OPTIONS(request: Request) {
   return new NextResponse(null, { status: 204, headers: getCorsHeaders(request) });
 }
 
-async function authenticateUser(request: Request): Promise<string | null> {
-  const authHeader = request.headers.get("authorization");
-  const cookieHeader = request.headers.get("cookie");
-  let token: string | null = null;
-
-  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
-    token = authHeader.slice(7).trim();
-  } else if (cookieHeader) {
-    const cookieMatch = cookieHeader.match(/auth-token=([^;]+)/);
-    if (cookieMatch) token = cookieMatch[1];
-  }
-
-  if (!token) {
-    return null;
-  }
-
-  try {
-    const tokenHash = hashToken(token);
-    const rows = (await sql`
-      select u.id as user_id
-      from auth_sessions s
-      join users u on u.id = s.user_id
-      where s.token_hash = ${tokenHash}
-        and s.revoked_at is null
-        and s.expires_at > now()
-      limit 1
-    `) as Array<{ user_id: string }>;
-
-    return rows[0]?.user_id ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export async function POST(
   request: Request,
   { params }: { params: { ticketId: string } }
@@ -76,8 +42,8 @@ export async function POST(
   const supportUserId = searchParams.get("supportUserId");
   const reader = searchParams.get("reader");
 
-  const userId = await authenticateUser(request);
-  const isSupportAccess = !!supportUserId && reader === "support";
+  const userId = await getSessionUserId(request);
+  const isSupportAccess = (await verifySupportJwt(request)) && reader === "support";
 
   if (!userId && !isSupportAccess) {
     return NextResponse.json(
@@ -105,7 +71,7 @@ export async function POST(
       );
     }
 
-    if (isSupportAccess && ticketRows[0].user_id !== supportUserId) {
+    if (isSupportAccess && supportUserId && ticketRows[0].user_id !== supportUserId) {
       return NextResponse.json(
         { error: "Ticket user mismatch" },
         { status: 403, headers: corsHeaders }
